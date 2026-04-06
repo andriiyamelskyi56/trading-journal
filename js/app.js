@@ -750,12 +750,10 @@ form.addEventListener('submit', async (e) => {
       trade.pnl = Math.round(trade.pnl * 100) / 100;
     }
 
-    // Auto-detect result
-    if (!trade.result) {
-      if (trade.pnl > 0) trade.result = 'win';
-      else if (trade.pnl < 0) trade.result = 'loss';
-      else trade.result = 'breakeven';
-    }
+    // Auto-detect result based on P&L (always overrides dropdown)
+    if (trade.pnl > 0) trade.result = 'win';
+    else if (trade.pnl < 0) trade.result = 'loss';
+    else trade.result = trade.result || 'breakeven';
 
     // Upload pending images to Cloudinary
     console.log('[SAVE] pendingPre:', pendingFilesPre.length, 'pendingPost:', pendingFilesPost.length);
