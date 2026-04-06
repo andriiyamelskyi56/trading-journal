@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Trading Journal</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <!-- PANTALLA DE LOGIN -->
+  <div id="auth-screen" class="auth-screen">
+    <div class="auth-box">
+      <h1 class="auth-title">Trading Journal</h1>
+      <p class="auth-subtitle">Accede desde cualquier dispositivo</p>
+      <form id="auth-form">
+        <div class="form-group">
+          <label for="auth-email">Email</label>
+          <input type="email" id="auth-email" placeholder="tu@email.com" required>
+        </div>
+        <div class="form-group">
+          <label for="auth-password">Contraseña</label>
+          <input type="password" id="auth-password" placeholder="Mínimo 6 caracteres" required minlength="6">
+        </div>
+        <div class="auth-buttons">
+          <button type="submit" class="btn btn-primary" id="login-btn">Iniciar Sesión</button>
+          <button type="button" class="btn" id="register-btn">Crear Cuenta</button>
+        </div>
+        <p id="auth-error" class="auth-error"></p>
+      </form>
+    </div>
+  </div>
+
+  <!-- APP PRINCIPAL (oculta hasta login) -->
+  <div id="app" class="app-wrapper" style="display:none;">
+    <nav class="sidebar">
+      <div class="sidebar-header">
+        <h1>Trading Journal</h1>
+      </div>
+      <ul class="nav-links">
+        <li><a href="#" data-section="dashboard" class="active">
+          <span class="nav-icon">&#9776;</span> Dashboard
+        </a></li>
+        <li><a href="#" data-section="calendar">
+          <span class="nav-icon">&#128197;</span> Calendario
+        </a></li>
+        <li><a href="#" data-section="trades">
+          <span class="nav-icon">&#128200;</span> Operaciones
+        </a></li>
+        <li><a href="#" data-section="stats">
+          <span class="nav-icon">&#128202;</span> Estadísticas
+        </a></li>
+      </ul>
+      <div class="sidebar-footer">
+        <span id="user-email" class="user-email"></span>
+        <button class="btn btn-sm" id="logout-btn">Salir</button>
+      </div>
+    </nav>
+
+    <main class="content">
+      <!-- LOADING -->
+      <div id="loading-overlay" class="loading-overlay">
+        <div class="spinner"></div>
+        <p>Cargando operaciones...</p>
+      </div>
+
+      <!-- DASHBOARD -->
+      <section id="dashboard" class="section active">
+        <h2>Dashboard</h2>
+        <div class="summary-cards">
+          <div class="card card-total">
+            <span class="card-label">Total Operaciones</span>
+            <span class="card-value" id="total-trades">0</span>
+          </div>
+          <div class="card card-win">
+            <span class="card-label">Ganadoras</span>
+            <span class="card-value" id="win-trades">0</span>
+          </div>
+          <div class="card card-loss">
+            <span class="card-label">Perdedoras</span>
+            <span class="card-value" id="loss-trades">0</span>
+          </div>
+          <div class="card card-ratio">
+            <span class="card-label">Win Rate</span>
+            <span class="card-value" id="win-rate">0%</span>
+          </div>
+          <div class="card card-pnl">
+            <span class="card-label">P&L Total</span>
+            <span class="card-value" id="total-pnl">$0.00</span>
+          </div>
+        </div>
+        <div class="dashboard-charts">
+          <div class="chart-box">
+            <h3>Rentabilidad por Activo</h3>
+            <div id="asset-chart" class="bar-chart"></div>
+          </div>
+          <div class="chart-box">
+            <h3>Rendimiento por Día de la Semana</h3>
+            <div id="weekday-chart" class="bar-chart"></div>
+          </div>
+        </div>
+        <div class="dashboard-recent">
+          <h3>Últimas Operaciones</h3>
+          <table class="trades-table">
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Activo</th>
+                <th>Dirección</th>
+                <th>P&L</th>
+                <th>Resultado</th>
+              </tr>
+            </thead>
+            <tbody id="recent-trades-body"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- CALENDARIO -->
+      <section id="calendar" class="section">
+        <h2>Calendario</h2>
+        <div class="calendar-controls">
+          <button id="prev-month" class="btn btn-sm">&larr; Anterior</button>
+          <span id="calendar-month-year" class="calendar-title"></span>
+          <button id="next-month" class="btn btn-sm">Siguiente &rarr;</button>
+        </div>
+        <div class="calendar-grid" id="calendar-grid"></div>
+      </section>
+
+      <!-- OPERACIONES -->
+      <section id="trades" class="section">
+        <div class="section-header">
+          <h2>Operaciones</h2>
+          <button class="btn btn-primary" id="add-trade-btn">+ Nueva Operación</button>
+        </div>
+        <div class="filters">
+          <input type="text" id="filter-asset" placeholder="Filtrar por activo...">
+          <select id="filter-result">
+            <option value="">Todos</option>
+            <option value="win">Ganadoras</option>
+            <option value="loss">Perdedoras</option>
+            <option value="breakeven">Breakeven</option>
+          </select>
+        </div>
+        <table class="trades-table full-table">
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th>Activo</th>
+              <th>Dirección</th>
+              <th>Entrada</th>
+              <th>Salida</th>
+              <th>Cantidad</th>
+              <th>P&L</th>
+              <th>Resultado</th>
+              <th>Descripción</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="trades-table-body"></tbody>
+        </table>
+      </section>
+
+      <!-- ESTADÍSTICAS -->
+      <section id="stats" class="section">
+        <h2>Estadísticas</h2>
+        <div class="stats-grid">
+          <div class="stat-box">
+            <h3>Mejores Activos (por P&L)</h3>
+            <div id="stats-best-assets" class="stat-list"></div>
+          </div>
+          <div class="stat-box">
+            <h3>Peores Activos (por P&L)</h3>
+            <div id="stats-worst-assets" class="stat-list"></div>
+          </div>
+          <div class="stat-box">
+            <h3>Win Rate por Activo</h3>
+            <div id="stats-winrate-asset" class="stat-list"></div>
+          </div>
+          <div class="stat-box">
+            <h3>P&L por Día de la Semana</h3>
+            <div id="stats-weekday-pnl" class="stat-list"></div>
+          </div>
+          <div class="stat-box">
+            <h3>Operaciones por Día de la Semana</h3>
+            <div id="stats-weekday-count" class="stat-list"></div>
+          </div>
+          <div class="stat-box">
+            <h3>Métricas Avanzadas</h3>
+            <div id="stats-advanced" class="stat-list"></div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- MODAL NUEVA OPERACIÓN -->
+  <div class="modal-overlay" id="trade-modal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="modal-title">Nueva Operación</h3>
+        <button class="modal-close" id="modal-close">&times;</button>
+      </div>
+      <form id="trade-form">
+        <input type="hidden" id="trade-id">
+        <div class="form-row">
+          <div class="form-group">
+            <label for="trade-date">Fecha</label>
+            <input type="date" id="trade-date" required>
+          </div>
+          <div class="form-group">
+            <label for="trade-asset">Activo</label>
+            <input type="text" id="trade-asset" placeholder="EUR/USD, BTC, AAPL..." required>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="trade-direction">Dirección</label>
+            <select id="trade-direction" required>
+              <option value="long">Long</option>
+              <option value="short">Short</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="trade-quantity">Cantidad / Lotes</label>
+            <input type="number" id="trade-quantity" step="any" placeholder="1.0" required>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="trade-entry">Precio Entrada</label>
+            <input type="number" id="trade-entry" step="any" required>
+          </div>
+          <div class="form-group">
+            <label for="trade-exit">Precio Salida</label>
+            <input type="number" id="trade-exit" step="any" required>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="trade-pnl">P&L ($)</label>
+            <input type="number" id="trade-pnl" step="any" placeholder="Se calcula auto o escribe manual">
+          </div>
+          <div class="form-group">
+            <label for="trade-result">Resultado</label>
+            <select id="trade-result" required>
+              <option value="win">Ganadora</option>
+              <option value="loss">Perdedora</option>
+              <option value="breakeven">Breakeven</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group full-width">
+          <label for="trade-notes">Notas / Descripción</label>
+          <textarea id="trade-notes" rows="3" placeholder="Describe tu operación..."></textarea>
+        </div>
+        <div class="form-actions">
+          <button type="button" class="btn" id="modal-cancel">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Guardar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Firebase SDK (CDN) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="js/firebase-config.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
