@@ -891,7 +891,7 @@ function renderTradesTable() {
     }
 
     return `
-    <tr class="trade-row trade-${t.result}" data-trade-id="${t.id}">
+    <tr class="trade-row trade-row-${t.result}" data-trade-id="${t.id}">
       <td>${formatDate(t.date)}</td>
       <td><strong>${escapeHtml(t.asset)}</strong></td>
       <td><span class="badge badge-${t.direction}">${t.direction.toUpperCase()}</span></td>
@@ -902,6 +902,7 @@ function renderTradesTable() {
       <td>${rrText}</td>
       <td class="negative">${t.risk ? '-$' + t.risk.toFixed(2) : '-'}</td>
       <td class="pnl ${(t.pnl || 0) >= 0 ? 'positive' : 'negative'}">${(t.pnl || 0) >= 0 ? '+' : ''}$${(t.pnl || 0).toFixed(2)}</td>
+      <td><span class="badge badge-${t.result}">${resultLabel(t.result)}</span></td>
       <td>${thumbsHtml}</td>
       <td class="actions-cell">
         <button class="btn btn-sm btn-edit" data-edit-id="${t.id}" onclick="event.stopPropagation()">Editar</button>
