@@ -758,20 +758,38 @@ form.addEventListener('submit', async (e) => {
     }
 
     // Upload pending images to Cloudinary
+    console.log('[SAVE] pendingPre:', pendingFilesPre.length, 'pendingPost:', pendingFilesPost.length);
+    console.log('[SAVE] existingPre:', existingScreensPre.length, 'existingPost:', existingScreensPost.length);
+
     if (pendingFilesPre.length > 0 || pendingFilesPost.length > 0) {
       saveBtn.textContent = 'Subiendo imagenes...';
-      const [newPreUrls, newPostUrls] = await Promise.all([
-        uploadPendingFiles(pendingFilesPre, currentUser.uid),
-        uploadPendingFiles(pendingFilesPost, currentUser.uid),
-      ]);
-      trade.screenshotsPre = [...existingScreensPre, ...newPreUrls];
-      trade.screenshotsPost = [...existingScreensPost, ...newPostUrls];
+      try {
+        const [newPreUrls, newPostUrls] = await Promise.all([
+          uploadPendingFiles(pendingFilesPre, currentUser.uid),
+          uploadPendingFiles(pendingFilesPost, currentUser.uid),
+        ]);
+        console.log('[SAVE] Cloudinary URLs pre:', newPreUrls);
+        console.log('[SAVE] Cloudinary URLs post:', newPostUrls);
+        trade.screenshotsPre = [...existingScreensPre, ...newPreUrls];
+        trade.screenshotsPost = [...existingScreensPost, ...newPostUrls];
+      } catch (uploadErr) {
+        console.error('[SAVE] Upload failed:', uploadErr);
+        alert('Error subiendo imagenes: ' + uploadErr.message);
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Guardar';
+        return;
+      }
     }
+
+    console.log('[SAVE] Final screenshotsPre:', trade.screenshotsPre);
+    console.log('[SAVE] Final screenshotsPost:', trade.screenshotsPost);
 
     // Save to Firestore
     saveBtn.textContent = 'Guardando...';
     const { id: savedId, ...dataToSave } = trade;
     dataToSave.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
+
+    console.log('[SAVE] Saving to Firestore, editingId:', editingTradeId);
 
     if (editingTradeId) {
       await userTradesRef().doc(editingTradeId).set(dataToSave);
@@ -780,6 +798,7 @@ form.addEventListener('submit', async (e) => {
       await userTradesRef().add(dataToSave);
     }
 
+    console.log('[SAVE] Success!');
     closeModal();
   } catch (err) {
     alert('Error al guardar: ' + err.message);
