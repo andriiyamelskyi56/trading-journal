@@ -840,6 +840,7 @@ function renderTradesTable() {
       <td class="pnl ${(t.pnl || 0) >= 0 ? 'positive' : 'negative'}">${(t.pnl || 0) >= 0 ? '+' : ''}$${(t.pnl || 0).toFixed(2)}</td>
       <td>${thumbsHtml}</td>
       <td class="actions-cell">
+        <button class="btn btn-sm btn-edit" data-edit-id="${t.id}" onclick="event.stopPropagation()">Editar</button>
         <button class="btn btn-sm btn-delete" onclick="event.stopPropagation();deleteTrade('${t.id}')">Eliminar</button>
       </td>
     </tr>`;
@@ -856,6 +857,14 @@ function renderTradesTable() {
         img.addEventListener('click', (e) => { e.stopPropagation(); openLightbox(allScreens[idx]); });
       }
     }
+  });
+
+  // Edit button click
+  tbody.querySelectorAll('[data-edit-id]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const trade = tradesCache.find(t => t.id === btn.dataset.editId);
+      if (trade) openModal(trade);
+    });
   });
 
   // Double-click to edit
