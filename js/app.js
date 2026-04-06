@@ -463,8 +463,8 @@ function calcRRActual() {
 
 document.getElementById('trade-exit').addEventListener('input', calcRRActual);
 
-// ==================== IMAGE COMPRESSION ====================
-function compressImage(file, maxWidth = 1200, quality = 0.8) {
+// ==================== IMAGE COMPRESSION (to Base64) ====================
+function compressImageToBase64(file, maxWidth = 800, quality = 0.6) {
   return new Promise((resolve) => {
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -476,7 +476,7 @@ function compressImage(file, maxWidth = 1200, quality = 0.8) {
         canvas.width = w;
         canvas.height = h;
         canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-        canvas.toBlob(resolve, 'image/jpeg', quality);
+        resolve(canvas.toDataURL('image/jpeg', quality));
       };
       img.src = e.target.result;
     };
@@ -602,18 +602,14 @@ document.addEventListener('paste', (e) => {
 });
 setupUploadZone('upload-post', 'file-post', 'preview-post', pendingFilesPost);
 
-// ==================== UPLOAD TO FIREBASE STORAGE ====================
-async function uploadScreenshots(tradeId, files, type) {
-  const urls = [];
+// ==================== COMPRESS PENDING FILES TO BASE64 ====================
+async function compressPendingFiles(files) {
+  const base64Urls = [];
   for (const entry of files) {
-    const compressed = await compressImage(entry.file);
-    const filename = `${type}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}.jpg`;
-    const ref = storage.ref(`users/${currentUser.uid}/trades/${tradeId}/${filename}`);
-    await ref.put(compressed);
-    const url = await ref.getDownloadURL();
-    urls.push(url);
+    const b64 = await compressImageToBase64(entry.file);
+    base64Urls.push(b64);
   }
-  return urls;
+  return base64Urls;
 }
 
 // ==================== LIGHTBOX ====================
@@ -743,34 +739,27 @@ form.addEventListener('submit', async (e) => {
       else trade.result = 'breakeven';
     }
 
-    // Save first to get ID, then upload screenshots
+    // Compress pending images to base64
+    if (pendingFilesPre.length > 0 || pendingFilesPost.length > 0) {
+      saveBtn.textContent = 'Comprimiendo imagenes...';
+      const [newPreB64, newPostB64] = await Promise.all([
+        compressPendingFiles(pendingFilesPre),
+        compressPendingFiles(pendingFilesPost),
+      ]);
+      trade.screenshotsPre = [...existingScreensPre, ...newPreB64];
+      trade.screenshotsPost = [...existingScreensPost, ...newPostB64];
+    }
+
+    // Save to Firestore
+    saveBtn.textContent = 'Guardando...';
     const { id: savedId, ...dataToSave } = trade;
     dataToSave.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
 
-    let docId;
     if (editingTradeId) {
-      docId = editingTradeId;
-      await userTradesRef().doc(docId).set(dataToSave);
+      await userTradesRef().doc(editingTradeId).set(dataToSave);
     } else {
       dataToSave.createdAt = firebase.firestore.FieldValue.serverTimestamp();
-      const docRef = await userTradesRef().add(dataToSave);
-      docId = docRef.id;
-    }
-
-    // Upload new screenshots
-    if (pendingFilesPre.length > 0 || pendingFilesPost.length > 0) {
-      const [newPreUrls, newPostUrls] = await Promise.all([
-        uploadScreenshots(docId, pendingFilesPre, 'pre'),
-        uploadScreenshots(docId, pendingFilesPost, 'post'),
-      ]);
-
-      const updatedScreensPre = [...existingScreensPre, ...newPreUrls];
-      const updatedScreensPost = [...existingScreensPost, ...newPostUrls];
-
-      await userTradesRef().doc(docId).update({
-        screenshotsPre: updatedScreensPre,
-        screenshotsPost: updatedScreensPost,
-      });
+      await userTradesRef().add(dataToSave);
     }
 
     closeModal();
