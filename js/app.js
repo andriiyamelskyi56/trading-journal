@@ -774,8 +774,12 @@ form.addEventListener('submit', async (e) => {
     }
     trade.risk = riskAmount;
 
+    // Result is always set by the user
+    trade.result = document.getElementById('trade-result').value || 'breakeven';
+
     // Calculate P&L
     if (pnlVal) {
+      // Manual P&L entered by user
       trade.pnl = parseFloat(pnlVal);
     } else if (trade.exit !== null) {
       // P&L from actual exit price
@@ -786,19 +790,16 @@ form.addEventListener('submit', async (e) => {
       }
       trade.pnl = Math.round(trade.pnl * 100) / 100;
     } else if (trade.result === 'loss' && riskAmount > 0) {
-      // No exit price but marked as loss → P&L = -Risk (hit SL)
+      // No exit → loss = hit SL → P&L = -Risk
       trade.pnl = -riskAmount;
     } else if (trade.result === 'win' && trade.tp && entry) {
-      // No exit price but marked as win → P&L from TP
+      // No exit → win = hit TP → P&L from TP
       if (direction === 'long') {
         trade.pnl = Math.round((trade.tp - entry) * quantity * 100) / 100;
       } else {
         trade.pnl = Math.round((entry - trade.tp) * quantity * 100) / 100;
       }
     }
-
-    // Result is always set by the user, never auto-detected
-    trade.result = document.getElementById('trade-result').value || 'breakeven';
 
     // Upload pending images to Cloudinary
     console.log('[SAVE] pendingPre:', pendingFilesPre.length, 'pendingPost:', pendingFilesPost.length);
