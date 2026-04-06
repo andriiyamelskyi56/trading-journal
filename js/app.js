@@ -797,22 +797,8 @@ form.addEventListener('submit', async (e) => {
       }
     }
 
-    // Determine result
-    const selectedResult = document.getElementById('trade-result').value;
-    if (trade.exit !== null && trade.pnl !== 0) {
-      // Has exit price with P&L → result always from P&L
-      if (trade.pnl > 0) trade.result = 'win';
-      else trade.result = 'loss';
-    } else if (selectedResult) {
-      // User explicitly selected a result → respect it
-      trade.result = selectedResult;
-    } else if (trade.pnl > 0) {
-      trade.result = 'win';
-    } else if (trade.pnl < 0) {
-      trade.result = 'loss';
-    } else {
-      trade.result = 'breakeven';
-    }
+    // Result is always set by the user, never auto-detected
+    trade.result = document.getElementById('trade-result').value || 'breakeven';
 
     // Upload pending images to Cloudinary
     console.log('[SAVE] pendingPre:', pendingFilesPre.length, 'pendingPost:', pendingFilesPost.length);
