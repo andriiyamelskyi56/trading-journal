@@ -7,25 +7,123 @@
   <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
-  <!-- PANTALLA DE LOGIN -->
+  <!-- PANTALLA DE AUTH -->
   <div id="auth-screen" class="auth-screen">
-    <div class="auth-box">
+
+    <!-- VISTA: ELEGIR LOGIN O REGISTRO -->
+    <div id="auth-welcome" class="auth-box">
       <h1 class="auth-title">Trading Journal</h1>
-      <p class="auth-subtitle">Accede desde cualquier dispositivo</p>
-      <form id="auth-form">
+      <p class="auth-subtitle">Tu diario de trading profesional. Accede desde cualquier dispositivo.</p>
+      <div class="auth-buttons">
+        <button class="btn btn-primary btn-lg" id="go-login-btn">Iniciar Sesion</button>
+        <button class="btn btn-lg" id="go-register-btn">Crear Cuenta Nueva</button>
+      </div>
+    </div>
+
+    <!-- VISTA: LOGIN -->
+    <div id="auth-login" class="auth-box" style="display:none;">
+      <h1 class="auth-title">Iniciar Sesion</h1>
+      <p class="auth-subtitle">Accede a tu diario de trading</p>
+      <form id="login-form">
         <div class="form-group">
-          <label for="auth-email">Email</label>
-          <input type="email" id="auth-email" placeholder="tu@email.com" required>
+          <label for="login-email">Email</label>
+          <input type="email" id="login-email" placeholder="tu@email.com" required>
         </div>
         <div class="form-group">
-          <label for="auth-password">Contraseña</label>
-          <input type="password" id="auth-password" placeholder="Mínimo 6 caracteres" required minlength="6">
+          <label for="login-password">Contrasena</label>
+          <input type="password" id="login-password" placeholder="Tu contrasena" required minlength="6">
         </div>
         <div class="auth-buttons">
-          <button type="submit" class="btn btn-primary" id="login-btn">Iniciar Sesión</button>
-          <button type="button" class="btn" id="register-btn">Crear Cuenta</button>
+          <button type="submit" class="btn btn-primary btn-lg" id="login-submit-btn">Entrar</button>
         </div>
-        <p id="auth-error" class="auth-error"></p>
+        <p id="login-error" class="auth-error"></p>
+        <div class="auth-links">
+          <a href="#" id="forgot-password-link">He olvidado mi contrasena</a>
+          <a href="#" id="login-to-register">No tengo cuenta, crear una</a>
+        </div>
+      </form>
+    </div>
+
+    <!-- VISTA: REGISTRO -->
+    <div id="auth-register" class="auth-box" style="display:none;">
+      <h1 class="auth-title">Crear Cuenta</h1>
+      <p class="auth-subtitle">Registrate para empezar tu diario</p>
+      <form id="register-form">
+        <div class="form-row">
+          <div class="form-group">
+            <label for="reg-firstname">Nombre</label>
+            <input type="text" id="reg-firstname" placeholder="Tu nombre" required>
+          </div>
+          <div class="form-group">
+            <label for="reg-lastname">Apellidos</label>
+            <input type="text" id="reg-lastname" placeholder="Tus apellidos" required>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="reg-email">Email</label>
+          <input type="email" id="reg-email" placeholder="tu@email.com" required>
+        </div>
+        <div class="form-group">
+          <label for="reg-password">Contrasena</label>
+          <input type="password" id="reg-password" placeholder="Minimo 6 caracteres" required minlength="6">
+          <span class="input-hint" id="password-strength"></span>
+        </div>
+        <div class="form-group">
+          <label for="reg-password-confirm">Confirmar Contrasena</label>
+          <input type="password" id="reg-password-confirm" placeholder="Repite la contrasena" required minlength="6">
+          <span class="input-hint" id="password-match"></span>
+        </div>
+        <div class="form-group checkbox-group">
+          <label>
+            <input type="checkbox" id="reg-terms" required>
+            Acepto los terminos de uso y la politica de privacidad
+          </label>
+        </div>
+        <div class="auth-buttons">
+          <button type="submit" class="btn btn-primary btn-lg" id="register-submit-btn">Crear Cuenta</button>
+        </div>
+        <p id="register-error" class="auth-error"></p>
+        <div class="auth-links">
+          <a href="#" id="register-to-login">Ya tengo cuenta, iniciar sesion</a>
+        </div>
+      </form>
+    </div>
+
+    <!-- VISTA: VERIFICAR EMAIL -->
+    <div id="auth-verify" class="auth-box" style="display:none;">
+      <div class="verify-icon">&#9993;</div>
+      <h1 class="auth-title">Verifica tu Email</h1>
+      <p class="auth-subtitle">Hemos enviado un enlace de verificacion a:</p>
+      <p id="verify-email-display" class="verify-email"></p>
+      <p class="auth-subtitle">Abre tu correo, haz click en el enlace y luego pulsa el boton de abajo.</p>
+      <div class="auth-buttons">
+        <button class="btn btn-primary btn-lg" id="check-verification-btn">Ya he verificado mi email</button>
+        <button class="btn btn-lg" id="resend-verification-btn">Reenviar email de verificacion</button>
+      </div>
+      <p id="verify-error" class="auth-error"></p>
+      <p id="verify-success" class="auth-success"></p>
+      <div class="auth-links">
+        <a href="#" id="verify-logout">Usar otra cuenta</a>
+      </div>
+    </div>
+
+    <!-- VISTA: RECUPERAR CONTRASENA -->
+    <div id="auth-reset" class="auth-box" style="display:none;">
+      <h1 class="auth-title">Recuperar Contrasena</h1>
+      <p class="auth-subtitle">Te enviaremos un email para restablecer tu contrasena</p>
+      <form id="reset-form">
+        <div class="form-group">
+          <label for="reset-email">Email de tu cuenta</label>
+          <input type="email" id="reset-email" placeholder="tu@email.com" required>
+        </div>
+        <div class="auth-buttons">
+          <button type="submit" class="btn btn-primary btn-lg" id="reset-submit-btn">Enviar Email de Recuperacion</button>
+        </div>
+        <p id="reset-error" class="auth-error"></p>
+        <p id="reset-success" class="auth-success"></p>
+        <div class="auth-links">
+          <a href="#" id="reset-to-login">Volver a iniciar sesion</a>
+        </div>
       </form>
     </div>
   </div>

@@ -667,8 +667,14 @@ a { color: var(--accent); text-decoration: none; }
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 40px;
-  width: 400px;
+  width: 460px;
   max-width: 95vw;
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .auth-title {
@@ -687,6 +693,7 @@ a { color: var(--accent); text-decoration: none; }
   color: var(--text-muted);
   font-size: 14px;
   margin-bottom: 28px;
+  line-height: 1.5;
 }
 
 .auth-buttons {
@@ -703,22 +710,69 @@ a { color: var(--accent); text-decoration: none; }
   font-weight: 600;
 }
 
+.btn-lg {
+  padding: 14px 20px !important;
+  font-size: 15px !important;
+}
+
 .auth-error {
   display: none;
   color: var(--red);
   font-size: 13px;
   text-align: center;
   margin-top: 12px;
-  padding: 8px;
+  padding: 10px;
   background: var(--red-bg);
   border-radius: 6px;
+}
+
+.auth-success {
+  display: none;
+  color: var(--green);
+  font-size: 13px;
+  text-align: center;
+  margin-top: 12px;
+  padding: 10px;
+  background: var(--green-bg);
+  border-radius: 6px;
+}
+
+.auth-links {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.auth-links a {
+  font-size: 13px;
+  color: var(--accent);
+  transition: color 0.2s;
+}
+
+.auth-links a:hover {
+  color: var(--accent-hover);
 }
 
 .auth-screen .form-group {
   margin-bottom: 14px;
 }
 
-.auth-screen .form-group input {
+.auth-screen .form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 0;
+}
+
+.auth-screen .form-row .form-group {
+  margin-bottom: 14px;
+}
+
+.auth-screen .form-group input[type="text"],
+.auth-screen .form-group input[type="email"],
+.auth-screen .form-group input[type="password"] {
   width: 100%;
   padding: 10px 14px;
   border: 1px solid var(--border);
@@ -739,6 +793,46 @@ a { color: var(--accent); text-decoration: none; }
   color: var(--text-muted);
   margin-bottom: 4px;
   display: block;
+}
+
+.input-hint {
+  font-size: 11px;
+  margin-top: 4px;
+  display: block;
+}
+
+.hint-weak { color: var(--red); }
+.hint-medium { color: var(--yellow); }
+.hint-strong { color: var(--green); }
+
+.checkbox-group label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.checkbox-group input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.verify-icon {
+  font-size: 48px;
+  text-align: center;
+  margin-bottom: 16px;
+}
+
+.verify-email {
+  text-align: center;
+  font-weight: 700;
+  color: var(--accent);
+  font-size: 16px;
+  margin-bottom: 16px;
 }
 
 /* ==================== APP WRAPPER ==================== */
