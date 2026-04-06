@@ -17,12 +17,12 @@
 // ============================================================
 
 const firebaseConfig = {
-  apiKey: "TU_API_KEY_AQUI",
-  authDomain: "TU_PROYECTO.firebaseapp.com",
-  projectId: "TU_PROJECT_ID",
-  storageBucket: "TU_PROYECTO.firebasestorage.app",
-  messagingSenderId: "123456789",
-  appId: "TU_APP_ID"
+  apiKey: "AIzaSyCJHf5nvCPmFUiD_TfgadJ4ODWCNwEg5A0",
+  authDomain: "trading-journal-c790b.firebaseapp.com",
+  projectId: "trading-journal-c790b",
+  storageBucket: "trading-journal-c790b.firebasestorage.app",
+  messagingSenderId: "322218910001",
+  appId: "1:322218910001:web:0572c1a9a910fa973a9010"
 };
 
 // Inicializar Firebase
