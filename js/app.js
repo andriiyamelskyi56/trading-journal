@@ -463,25 +463,25 @@ function calcRRActual() {
 
 document.getElementById('trade-exit').addEventListener('input', calcRRActual);
 
-// ==================== IMAGE COMPRESSION (to Base64) ====================
-function compressImageToBase64(file, maxWidth = 800, quality = 0.6) {
-  return new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        let w = img.width, h = img.height;
-        if (w > maxWidth) { h = (maxWidth / w) * h; w = maxWidth; }
-        canvas.width = w;
-        canvas.height = h;
-        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-        resolve(canvas.toDataURL('image/jpeg', quality));
-      };
-      img.src = e.target.result;
-    };
-    reader.readAsDataURL(file);
+// ==================== CLOUDINARY CONFIG ====================
+const CLOUDINARY_CLOUD = 'dr1nxeniz';
+const CLOUDINARY_PRESET = 'ml_default';
+
+// ==================== CLOUDINARY UPLOAD ====================
+async function uploadToCloudinary(file, userId) {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('upload_preset', CLOUDINARY_PRESET);
+  formData.append('folder', `trading-journal/${userId}`);
+
+  const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`, {
+    method: 'POST',
+    body: formData,
   });
+
+  if (!res.ok) throw new Error('Error subiendo imagen a Cloudinary');
+  const data = await res.json();
+  return data.secure_url;
 }
 
 // ==================== FILE UPLOAD ZONES ====================
@@ -620,14 +620,14 @@ document.addEventListener('paste', (e) => {
 });
 setupUploadZone('upload-post', 'file-post', 'preview-post', pendingFilesPost);
 
-// ==================== COMPRESS PENDING FILES TO BASE64 ====================
-async function compressPendingFiles(files) {
-  const base64Urls = [];
+// ==================== UPLOAD PENDING FILES TO CLOUDINARY ====================
+async function uploadPendingFiles(files, userId) {
+  const urls = [];
   for (const entry of files) {
-    const b64 = await compressImageToBase64(entry.file);
-    base64Urls.push(b64);
+    const url = await uploadToCloudinary(entry.file, userId);
+    urls.push(url);
   }
-  return base64Urls;
+  return urls;
 }
 
 // ==================== LIGHTBOX ====================
@@ -757,15 +757,15 @@ form.addEventListener('submit', async (e) => {
       else trade.result = 'breakeven';
     }
 
-    // Compress pending images to base64
+    // Upload pending images to Cloudinary
     if (pendingFilesPre.length > 0 || pendingFilesPost.length > 0) {
-      saveBtn.textContent = 'Comprimiendo imagenes...';
-      const [newPreB64, newPostB64] = await Promise.all([
-        compressPendingFiles(pendingFilesPre),
-        compressPendingFiles(pendingFilesPost),
+      saveBtn.textContent = 'Subiendo imagenes...';
+      const [newPreUrls, newPostUrls] = await Promise.all([
+        uploadPendingFiles(pendingFilesPre, currentUser.uid),
+        uploadPendingFiles(pendingFilesPost, currentUser.uid),
       ]);
-      trade.screenshotsPre = [...existingScreensPre, ...newPreB64];
-      trade.screenshotsPost = [...existingScreensPost, ...newPostB64];
+      trade.screenshotsPre = [...existingScreensPre, ...newPreUrls];
+      trade.screenshotsPost = [...existingScreensPost, ...newPostUrls];
     }
 
     // Save to Firestore
