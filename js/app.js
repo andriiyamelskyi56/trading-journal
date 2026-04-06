@@ -529,14 +529,32 @@ function renderUploadPreview(previewId, pendingArray, existingUrls = []) {
   existingUrls.forEach((url, i) => {
     const thumb = document.createElement('div');
     thumb.className = 'upload-thumb';
-    thumb.innerHTML = `<img src="${url}" onclick="openLightbox('${url}')"><button type="button" class="upload-thumb-remove" data-existing="${i}">&times;</button>`;
+    const img = document.createElement('img');
+    img.src = url;
+    img.addEventListener('click', (e) => { e.stopPropagation(); openLightbox(url); });
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'upload-thumb-remove';
+    btn.dataset.existing = i;
+    btn.textContent = '\u00d7';
+    thumb.appendChild(img);
+    thumb.appendChild(btn);
     preview.appendChild(thumb);
   });
 
   pendingArray.forEach((entry, i) => {
     const thumb = document.createElement('div');
     thumb.className = 'upload-thumb';
-    thumb.innerHTML = `<img src="${entry.dataUrl}" onclick="openLightbox('${entry.dataUrl}')"><button type="button" class="upload-thumb-remove" data-pending="${i}">&times;</button>`;
+    const img = document.createElement('img');
+    img.src = entry.dataUrl;
+    img.addEventListener('click', (e) => { e.stopPropagation(); openLightbox(entry.dataUrl); });
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'upload-thumb-remove';
+    btn.dataset.pending = i;
+    btn.textContent = '\u00d7';
+    thumb.appendChild(img);
+    thumb.appendChild(btn);
     preview.appendChild(thumb);
   });
 
@@ -797,7 +815,7 @@ function renderTradesTable() {
   tbody.innerHTML = trades.map(t => {
     const allScreens = [...(t.screenshotsPre || []), ...(t.screenshotsPost || [])];
     const thumbsHtml = allScreens.length > 0
-      ? `<div class="trade-thumbs">${allScreens.slice(0, 3).map(url => `<img class="trade-thumb trade-thumb-lg" src="${url}" onclick="event.stopPropagation();openLightbox('${url}')">`).join('')}${allScreens.length > 3 ? `<span style="font-size:11px;color:var(--text-muted);align-self:center;">+${allScreens.length - 3}</span>` : ''}</div>`
+      ? `<div class="trade-thumbs">${allScreens.slice(0, 3).map((_, idx) => `<img class="trade-thumb trade-thumb-lg" data-trade-img="${t.id}" data-img-idx="${idx}">`).join('')}${allScreens.length > 3 ? `<span style="font-size:11px;color:var(--text-muted);align-self:center;">+${allScreens.length - 3}</span>` : ''}</div>`
       : '<span style="color:var(--text-muted);font-size:11px;">-</span>';
 
     // Calculate RR for display
@@ -826,6 +844,19 @@ function renderTradesTable() {
       </td>
     </tr>`;
   }).join('');
+
+  // Set thumbnail sources and click handlers (avoids huge base64 in HTML attributes)
+  tbody.querySelectorAll('img[data-trade-img]').forEach(img => {
+    const trade = tradesCache.find(t => t.id === img.dataset.tradeImg);
+    if (trade) {
+      const allScreens = [...(trade.screenshotsPre || []), ...(trade.screenshotsPost || [])];
+      const idx = parseInt(img.dataset.imgIdx);
+      if (allScreens[idx]) {
+        img.src = allScreens[idx];
+        img.addEventListener('click', (e) => { e.stopPropagation(); openLightbox(allScreens[idx]); });
+      }
+    }
+  });
 
   // Double-click to edit
   tbody.querySelectorAll('.trade-row').forEach(row => {
@@ -1028,8 +1059,8 @@ function renderWeekView() {
         if (t.notesPre || t.notes) html += `<div class="week-trade-notes">${escapeHtml(t.notesPre || t.notes)}</div>`;
         if (allScreens.length > 0) {
           html += '<div class="week-trade-thumbs">';
-          allScreens.slice(0, 2).forEach(url => {
-            html += `<img class="week-trade-thumb" src="${url}" onclick="event.stopPropagation();openLightbox('${url}')">`;
+          allScreens.slice(0, 2).forEach((_, idx) => {
+            html += `<img class="week-trade-thumb" data-week-img="${t.id}" data-img-idx="${idx}">`;
           });
           if (allScreens.length > 2) html += `<span style="font-size:9px;color:var(--text-muted);">+${allScreens.length - 2}</span>`;
           html += '</div>';
@@ -1042,6 +1073,19 @@ function renderWeekView() {
   }
   html += '</div>';
   grid.innerHTML = html;
+
+  // Set week thumbnail sources
+  grid.querySelectorAll('img[data-week-img]').forEach(img => {
+    const trade = tradesCache.find(t => t.id === img.dataset.weekImg);
+    if (trade) {
+      const allScreens = [...(trade.screenshotsPre || []), ...(trade.screenshotsPost || [])];
+      const idx = parseInt(img.dataset.imgIdx);
+      if (allScreens[idx]) {
+        img.src = allScreens[idx];
+        img.addEventListener('click', (e) => { e.stopPropagation(); openLightbox(allScreens[idx]); });
+      }
+    }
+  });
 
   // Double-click on trade item to edit
   grid.querySelectorAll('.week-trade-item').forEach(item => {
