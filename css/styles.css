@@ -478,6 +478,176 @@ a { color: var(--accent); text-decoration: none; }
   font-weight: 700;
 }
 
+/* ==================== VIEW BUTTONS ==================== */
+.view-buttons {
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+  margin-bottom: 20px;
+}
+
+.view-btn {
+  padding: 6px 18px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-card);
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  transition: all 0.2s;
+}
+
+.view-btn:hover { background: var(--bg-hover); color: var(--text); }
+
+.view-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+/* ==================== WEEK VIEW ==================== */
+.week-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  width: 100%;
+}
+
+.week-header-row {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  border-bottom: 1px solid var(--border);
+  width: 100%;
+}
+
+.week-header-cell {
+  padding: 12px 8px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.week-header-cell .week-header-date {
+  display: block;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+  margin-top: 4px;
+}
+
+.week-cell {
+  min-height: 200px;
+  padding: 12px;
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: background 0.2s;
+  position: relative;
+}
+
+.week-cell:last-child { border-right: none; }
+.week-cell:hover { background: var(--bg-hover); }
+.week-cell.today { background: rgba(99, 102, 241, 0.1); }
+.week-cell.day-win { background: var(--green-bg); }
+.week-cell.day-loss { background: var(--red-bg); }
+.week-cell.day-breakeven { background: var(--yellow-bg); }
+
+.week-trade-item {
+  padding: 6px 8px;
+  margin-bottom: 4px;
+  border-radius: 4px;
+  font-size: 12px;
+  border-left: 3px solid;
+}
+
+.week-trade-item.trade-win { border-color: var(--green); background: var(--green-bg); }
+.week-trade-item.trade-loss { border-color: var(--red); background: var(--red-bg); }
+.week-trade-item.trade-breakeven { border-color: var(--yellow); background: var(--yellow-bg); }
+
+.week-trade-asset { font-weight: 700; font-size: 12px; }
+.week-trade-pnl { font-weight: 600; font-size: 11px; margin-top: 2px; }
+.week-trade-notes { font-size: 10px; color: var(--text-muted); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ==================== YEAR VIEW ==================== */
+.year-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  width: 100%;
+}
+
+.year-month {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.year-month:hover {
+  border-color: var(--accent);
+  background: var(--bg-hover);
+}
+
+.year-month-title {
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  text-align: center;
+  color: var(--text);
+}
+
+.year-month-header {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+  margin-bottom: 4px;
+}
+
+.year-month-header span {
+  font-size: 8px;
+  text-align: center;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.year-month-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+
+.year-day {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 2px;
+  background: var(--bg-hover);
+}
+
+.year-day.day-win { background: var(--green); }
+.year-day.day-loss { background: var(--red); }
+.year-day.day-breakeven { background: var(--yellow); }
+.year-day.today { outline: 2px solid var(--accent); outline-offset: -1px; }
+.year-day.empty { background: transparent; }
+
+.year-month-summary {
+  margin-top: 8px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+@media (max-width: 768px) {
+  .year-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .week-cell { min-height: 100px; padding: 6px; }
+  .week-header-cell .week-header-date { font-size: 14px; }
+  .view-buttons { gap: 2px; }
+  .view-btn { padding: 6px 12px; font-size: 12px; }
+}
+
 /* ==================== STATISTICS ==================== */
 .stats-grid {
   display: grid;
@@ -571,6 +741,8 @@ a { color: var(--accent); text-decoration: none; }
   overflow-y: auto;
 }
 
+.modal-wide { width: 640px; }
+
 .modal-header {
   display: flex;
   justify-content: space-between;
@@ -629,6 +801,202 @@ a { color: var(--accent); text-decoration: none; }
   display: flex;
   justify-content: flex-end;
   gap: 10px;
+}
+
+/* ==================== MODAL TABS ==================== */
+.modal-tabs {
+  display: flex;
+  gap: 0;
+  margin-bottom: 20px;
+  border-bottom: 2px solid var(--border);
+}
+
+.modal-tab {
+  padding: 10px 24px;
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  transition: all 0.2s;
+}
+
+.modal-tab:hover { color: var(--text); }
+
+.modal-tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.modal-tab-content { display: none; }
+.modal-tab-content.active { display: block; }
+
+/* ==================== RR DISPLAY ==================== */
+.rr-display, .rr-actual {
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--accent);
+  font-size: 16px;
+  font-weight: 700;
+  text-align: center;
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.rr-actual { color: var(--text); }
+
+/* ==================== UPLOAD ZONE ==================== */
+.upload-zone {
+  border: 2px dashed var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  min-height: 80px;
+}
+
+.upload-zone:hover, .upload-zone.dragover {
+  border-color: var(--accent);
+  background: rgba(99, 102, 241, 0.05);
+}
+
+.upload-placeholder {
+  color: var(--text-muted);
+  font-size: 13px;
+  margin: 0;
+}
+
+.upload-link {
+  color: var(--accent);
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.upload-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.upload-preview:empty { margin-top: 0; }
+
+.upload-thumb {
+  position: relative;
+  width: 80px;
+  height: 80px;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+.upload-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  cursor: pointer;
+}
+
+.upload-thumb-remove {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--red);
+  color: #fff;
+  border: none;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ==================== LIGHTBOX ==================== */
+.lightbox {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.9);
+  z-index: 2000;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+}
+
+.lightbox.open {
+  display: flex;
+}
+
+.lightbox img {
+  max-width: 95vw;
+  max-height: 95vh;
+  object-fit: contain;
+  border-radius: 8px;
+}
+
+.lightbox-close {
+  position: absolute;
+  top: 16px;
+  right: 24px;
+  background: none;
+  border: none;
+  color: #fff;
+  font-size: 36px;
+  cursor: pointer;
+  z-index: 2001;
+}
+
+/* ==================== TRADE THUMBNAILS (table & calendar) ==================== */
+.trade-thumbs {
+  display: flex;
+  gap: 4px;
+}
+
+.trade-thumb {
+  width: 40px;
+  height: 40px;
+  border-radius: 4px;
+  object-fit: cover;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  transition: transform 0.2s;
+}
+
+.trade-thumb:hover { transform: scale(1.1); }
+
+.trade-thumb-lg {
+  width: 60px;
+  height: 60px;
+}
+
+.week-trade-thumbs {
+  display: flex;
+  gap: 3px;
+  margin-top: 4px;
+}
+
+.week-trade-thumb {
+  width: 32px;
+  height: 32px;
+  border-radius: 3px;
+  object-fit: cover;
+  cursor: pointer;
+  border: 1px solid var(--border);
 }
 
 /* ==================== RESPONSIVE ==================== */
@@ -846,6 +1214,7 @@ a { color: var(--accent); text-decoration: none; }
 .app-wrapper {
   display: flex;
   min-height: 100vh;
+  width: 100%;
 }
 
 /* ==================== SIDEBAR FOOTER ==================== */

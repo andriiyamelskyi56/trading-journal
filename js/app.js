@@ -5,6 +5,8 @@ let currentMonth = new Date().getMonth();
 let currentYear = new Date().getFullYear();
 let editingTradeId = null;
 let unsubscribeTrades = null;
+let calendarView = 'month';
+let currentWeekStart = (() => { const d = new Date(); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); d.setHours(0,0,0,0); return d; })();
 
 // ==================== AUTH VIEWS ====================
 const authScreen = document.getElementById('auth-screen');
@@ -380,11 +382,272 @@ const addBtn = document.getElementById('add-trade-btn');
 const closeBtn = document.getElementById('modal-close');
 const cancelBtn = document.getElementById('modal-cancel');
 
+// Pending files to upload on save
+let pendingFilesPre = [];  // {file, dataUrl}
+let pendingFilesPost = [];
+let existingScreensPre = [];  // URLs from existing trade
+let existingScreensPost = [];
+
+// ==================== MODAL TABS ====================
+document.querySelectorAll('.modal-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.modal-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.modal-tab-content').forEach(c => c.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
+  });
+});
+
+function switchToTab(tabName) {
+  document.querySelectorAll('.modal-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tabName));
+  document.querySelectorAll('.modal-tab-content').forEach(c => c.classList.remove('active'));
+  document.getElementById('tab-' + tabName).classList.add('active');
+}
+
+// ==================== RR CALCULATION ====================
+function calcRR() {
+  const entry = parseFloat(document.getElementById('trade-entry').value);
+  const sl = parseFloat(document.getElementById('trade-sl').value);
+  const tp = parseFloat(document.getElementById('trade-tp').value);
+  const dir = document.getElementById('trade-direction').value;
+  const rrEl = document.getElementById('trade-rr');
+
+  if (!entry || !sl || !tp || entry === sl) { rrEl.textContent = '--'; return; }
+
+  let risk, reward;
+  if (dir === 'long') {
+    risk = entry - sl;
+    reward = tp - entry;
+  } else {
+    risk = sl - entry;
+    reward = entry - tp;
+  }
+
+  if (risk <= 0) { rrEl.textContent = 'SL invalido'; return; }
+  if (reward <= 0) { rrEl.textContent = 'TP invalido'; return; }
+
+  const rr = reward / risk;
+  rrEl.textContent = `1 : ${rr.toFixed(2)}`;
+  rrEl.style.color = rr >= 2 ? 'var(--green)' : rr >= 1 ? 'var(--yellow)' : 'var(--red)';
+}
+
+['trade-entry', 'trade-sl', 'trade-tp', 'trade-direction'].forEach(id => {
+  document.getElementById(id).addEventListener('input', calcRR);
+  document.getElementById(id).addEventListener('change', calcRR);
+});
+
+// ==================== P&L vs PLAN ====================
+function calcRRActual() {
+  const entry = parseFloat(document.getElementById('trade-entry').value);
+  const exit = parseFloat(document.getElementById('trade-exit').value);
+  const sl = parseFloat(document.getElementById('trade-sl').value);
+  const dir = document.getElementById('trade-direction').value;
+  const el = document.getElementById('trade-rr-actual');
+
+  if (!entry || !exit || !sl || entry === sl) { el.textContent = '--'; return; }
+
+  let risk, actual;
+  if (dir === 'long') {
+    risk = entry - sl;
+    actual = exit - entry;
+  } else {
+    risk = sl - entry;
+    actual = entry - exit;
+  }
+
+  if (risk <= 0) { el.textContent = '--'; return; }
+  const rr = actual / risk;
+  el.textContent = `${rr >= 0 ? '+' : ''}${rr.toFixed(2)}R`;
+  el.style.color = rr >= 0 ? 'var(--green)' : 'var(--red)';
+}
+
+document.getElementById('trade-exit').addEventListener('input', calcRRActual);
+
+// ==================== IMAGE COMPRESSION ====================
+function compressImage(file, maxWidth = 1200, quality = 0.8) {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let w = img.width, h = img.height;
+        if (w > maxWidth) { h = (maxWidth / w) * h; w = maxWidth; }
+        canvas.width = w;
+        canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        canvas.toBlob(resolve, 'image/jpeg', quality);
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+// ==================== FILE UPLOAD ZONES ====================
+function setupUploadZone(zoneId, fileInputId, previewId, pendingArray) {
+  const zone = document.getElementById(zoneId);
+  const fileInput = document.getElementById(fileInputId);
+  const preview = document.getElementById(previewId);
+
+  zone.addEventListener('click', (e) => {
+    if (e.target.closest('.upload-thumb-remove') || e.target.closest('.upload-thumb img')) return;
+    fileInput.click();
+  });
+
+  zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('dragover'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+  zone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    zone.classList.remove('dragover');
+    handleFiles(e.dataTransfer.files, previewId, pendingArray);
+  });
+
+  fileInput.addEventListener('change', () => {
+    handleFiles(fileInput.files, previewId, pendingArray);
+    fileInput.value = '';
+  });
+}
+
+function handleFiles(files, previewId, pendingArray) {
+  Array.from(files).forEach(file => {
+    if (!file.type.startsWith('image/')) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const entry = { file, dataUrl: e.target.result };
+      pendingArray.push(entry);
+      renderUploadPreview(previewId, pendingArray);
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function renderUploadPreview(previewId, pendingArray, existingUrls = []) {
+  const preview = document.getElementById(previewId);
+  preview.innerHTML = '';
+
+  existingUrls.forEach((url, i) => {
+    const thumb = document.createElement('div');
+    thumb.className = 'upload-thumb';
+    thumb.innerHTML = `<img src="${url}" onclick="openLightbox('${url}')"><button type="button" class="upload-thumb-remove" data-existing="${i}">&times;</button>`;
+    preview.appendChild(thumb);
+  });
+
+  pendingArray.forEach((entry, i) => {
+    const thumb = document.createElement('div');
+    thumb.className = 'upload-thumb';
+    thumb.innerHTML = `<img src="${entry.dataUrl}" onclick="openLightbox('${entry.dataUrl}')"><button type="button" class="upload-thumb-remove" data-pending="${i}">&times;</button>`;
+    preview.appendChild(thumb);
+  });
+
+  // Hide placeholder if there are files
+  const zone = preview.closest('.upload-zone');
+  const placeholder = zone.querySelector('.upload-placeholder');
+  if (placeholder) placeholder.style.display = (existingUrls.length + pendingArray.length) > 0 ? 'none' : '';
+}
+
+// Remove buttons
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('.upload-thumb-remove');
+  if (!btn) return;
+  e.stopPropagation();
+
+  const zone = btn.closest('.upload-zone');
+  const isPre = zone.id === 'upload-pre';
+  const pending = isPre ? pendingFilesPre : pendingFilesPost;
+  const existing = isPre ? existingScreensPre : existingScreensPost;
+  const previewId = isPre ? 'preview-pre' : 'preview-post';
+
+  if (btn.dataset.pending !== undefined) {
+    pending.splice(parseInt(btn.dataset.pending), 1);
+  } else if (btn.dataset.existing !== undefined) {
+    existing.splice(parseInt(btn.dataset.existing), 1);
+  }
+  renderUploadPreview(previewId, pending, existing);
+});
+
+setupUploadZone('upload-pre', 'file-pre', 'preview-pre', pendingFilesPre);
+
+// ==================== PASTE SCREENSHOTS (Ctrl+V / Cmd+V) ====================
+document.addEventListener('paste', (e) => {
+  if (!modal.classList.contains('open')) return;
+  const items = e.clipboardData && e.clipboardData.items;
+  if (!items) return;
+
+  const imageFiles = [];
+  for (const item of items) {
+    if (item.type.startsWith('image/')) {
+      const file = item.getAsFile();
+      if (file) imageFiles.push(file);
+    }
+  }
+  if (imageFiles.length === 0) return;
+
+  e.preventDefault();
+
+  // Paste into whichever tab is active
+  const isResultTab = document.getElementById('tab-result').classList.contains('active');
+  const pending = isResultTab ? pendingFilesPost : pendingFilesPre;
+  const previewId = isResultTab ? 'preview-post' : 'preview-pre';
+  const existing = isResultTab ? existingScreensPost : existingScreensPre;
+
+  imageFiles.forEach(file => {
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      pending.push({ file, dataUrl: ev.target.result });
+      renderUploadPreview(previewId, pending, existing);
+    };
+    reader.readAsDataURL(file);
+  });
+});
+setupUploadZone('upload-post', 'file-post', 'preview-post', pendingFilesPost);
+
+// ==================== UPLOAD TO FIREBASE STORAGE ====================
+async function uploadScreenshots(tradeId, files, type) {
+  const urls = [];
+  for (const entry of files) {
+    const compressed = await compressImage(entry.file);
+    const filename = `${type}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}.jpg`;
+    const ref = storage.ref(`users/${currentUser.uid}/trades/${tradeId}/${filename}`);
+    await ref.put(compressed);
+    const url = await ref.getDownloadURL();
+    urls.push(url);
+  }
+  return urls;
+}
+
+// ==================== LIGHTBOX ====================
+function openLightbox(src) {
+  const lb = document.getElementById('lightbox');
+  document.getElementById('lightbox-img').src = src;
+  lb.classList.add('open');
+}
+
+document.getElementById('lightbox').addEventListener('click', (e) => {
+  if (e.target.tagName !== 'IMG') {
+    document.getElementById('lightbox').classList.remove('open');
+  }
+});
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') document.getElementById('lightbox').classList.remove('open');
+});
+
+// ==================== OPEN / CLOSE MODAL ====================
 function openModal(trade = null) {
   editingTradeId = null;
   form.reset();
+  pendingFilesPre = [];
+  pendingFilesPost = [];
+  existingScreensPre = [];
+  existingScreensPost = [];
+  document.getElementById('trade-rr').textContent = '--';
+  document.getElementById('trade-rr').style.color = '';
+  document.getElementById('trade-rr-actual').textContent = '--';
+  document.getElementById('trade-rr-actual').style.color = '';
   document.getElementById('modal-title').textContent = 'Nueva Operacion';
   document.getElementById('trade-date').value = new Date().toISOString().split('T')[0];
+  switchToTab('plan');
 
   if (trade) {
     editingTradeId = trade.id;
@@ -395,12 +658,23 @@ function openModal(trade = null) {
     document.getElementById('trade-direction').value = trade.direction;
     document.getElementById('trade-quantity').value = trade.quantity;
     document.getElementById('trade-entry').value = trade.entry;
-    document.getElementById('trade-exit').value = trade.exit;
-    document.getElementById('trade-pnl').value = trade.pnl;
-    document.getElementById('trade-result').value = trade.result;
-    document.getElementById('trade-notes').value = trade.notes || '';
+    document.getElementById('trade-exit').value = trade.exit || '';
+    document.getElementById('trade-pnl').value = trade.pnl || '';
+    document.getElementById('trade-result').value = trade.result || '';
+    document.getElementById('trade-sl').value = trade.sl || '';
+    document.getElementById('trade-tp').value = trade.tp || '';
+    document.getElementById('trade-notes-pre').value = trade.notesPre || trade.notes || '';
+    document.getElementById('trade-notes-post').value = trade.notesPost || '';
+
+    existingScreensPre = [...(trade.screenshotsPre || [])];
+    existingScreensPost = [...(trade.screenshotsPost || [])];
+
+    calcRR();
+    calcRRActual();
   }
 
+  renderUploadPreview('preview-pre', pendingFilesPre, existingScreensPre);
+  renderUploadPreview('preview-post', pendingFilesPost, existingScreensPost);
   modal.classList.add('open');
 }
 
@@ -420,38 +694,92 @@ modal.addEventListener('click', (e) => {
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
 
-  const trade = {
-    id: editingTradeId || null,
-    date: document.getElementById('trade-date').value,
-    asset: document.getElementById('trade-asset').value.toUpperCase().trim(),
-    direction: document.getElementById('trade-direction').value,
-    quantity: parseFloat(document.getElementById('trade-quantity').value),
-    entry: parseFloat(document.getElementById('trade-entry').value),
-    exit: parseFloat(document.getElementById('trade-exit').value),
-    pnl: parseFloat(document.getElementById('trade-pnl').value) || 0,
-    result: document.getElementById('trade-result').value,
-    notes: document.getElementById('trade-notes').value.trim(),
-  };
-
-  if (!document.getElementById('trade-pnl').value) {
-    if (trade.direction === 'long') {
-      trade.pnl = (trade.exit - trade.entry) * trade.quantity;
-    } else {
-      trade.pnl = (trade.entry - trade.exit) * trade.quantity;
-    }
-    trade.pnl = Math.round(trade.pnl * 100) / 100;
-  }
-
-  if (trade.pnl > 0) trade.result = 'win';
-  else if (trade.pnl < 0) trade.result = 'loss';
-  else trade.result = 'breakeven';
+  const saveBtn = document.getElementById('save-trade-btn');
+  saveBtn.disabled = true;
+  saveBtn.textContent = 'Guardando...';
 
   try {
-    await saveTrade(trade);
+    const exitVal = document.getElementById('trade-exit').value;
+    const pnlVal = document.getElementById('trade-pnl').value;
+    const entry = parseFloat(document.getElementById('trade-entry').value);
+    const direction = document.getElementById('trade-direction').value;
+    const quantity = parseFloat(document.getElementById('trade-quantity').value);
+
+    const trade = {
+      id: editingTradeId || null,
+      date: document.getElementById('trade-date').value,
+      asset: document.getElementById('trade-asset').value.toUpperCase().trim(),
+      direction,
+      quantity,
+      entry,
+      exit: exitVal ? parseFloat(exitVal) : null,
+      sl: parseFloat(document.getElementById('trade-sl').value) || null,
+      tp: parseFloat(document.getElementById('trade-tp').value) || null,
+      pnl: 0,
+      result: document.getElementById('trade-result').value || '',
+      notesPre: document.getElementById('trade-notes-pre').value.trim(),
+      notesPost: document.getElementById('trade-notes-post').value.trim(),
+      notes: document.getElementById('trade-notes-pre').value.trim(),
+      screenshotsPre: [...existingScreensPre],
+      screenshotsPost: [...existingScreensPost],
+    };
+
+    // Calculate P&L
+    if (pnlVal) {
+      trade.pnl = parseFloat(pnlVal);
+    } else if (trade.exit !== null) {
+      if (direction === 'long') {
+        trade.pnl = (trade.exit - entry) * quantity;
+      } else {
+        trade.pnl = (entry - trade.exit) * quantity;
+      }
+      trade.pnl = Math.round(trade.pnl * 100) / 100;
+    }
+
+    // Auto-detect result
+    if (!trade.result) {
+      if (trade.pnl > 0) trade.result = 'win';
+      else if (trade.pnl < 0) trade.result = 'loss';
+      else trade.result = 'breakeven';
+    }
+
+    // Save first to get ID, then upload screenshots
+    const { id: savedId, ...dataToSave } = trade;
+    dataToSave.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
+
+    let docId;
+    if (editingTradeId) {
+      docId = editingTradeId;
+      await userTradesRef().doc(docId).set(dataToSave);
+    } else {
+      dataToSave.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+      const docRef = await userTradesRef().add(dataToSave);
+      docId = docRef.id;
+    }
+
+    // Upload new screenshots
+    if (pendingFilesPre.length > 0 || pendingFilesPost.length > 0) {
+      const [newPreUrls, newPostUrls] = await Promise.all([
+        uploadScreenshots(docId, pendingFilesPre, 'pre'),
+        uploadScreenshots(docId, pendingFilesPost, 'post'),
+      ]);
+
+      const updatedScreensPre = [...existingScreensPre, ...newPreUrls];
+      const updatedScreensPost = [...existingScreensPost, ...newPostUrls];
+
+      await userTradesRef().doc(docId).update({
+        screenshotsPre: updatedScreensPre,
+        screenshotsPost: updatedScreensPost,
+      });
+    }
+
     closeModal();
   } catch (err) {
     alert('Error al guardar: ' + err.message);
   }
+
+  saveBtn.disabled = false;
+  saveBtn.textContent = 'Guardar';
 });
 
 // ==================== DELETE TRADE ====================
@@ -478,24 +806,46 @@ function renderTradesTable() {
   trades.sort((a, b) => new Date(b.date) - new Date(a.date));
 
   tbody.innerHTML = trades.map(t => {
-    const tradeJson = JSON.stringify(t).replace(/"/g, '&quot;');
+    const allScreens = [...(t.screenshotsPre || []), ...(t.screenshotsPost || [])];
+    const thumbsHtml = allScreens.length > 0
+      ? `<div class="trade-thumbs">${allScreens.slice(0, 3).map(url => `<img class="trade-thumb trade-thumb-lg" src="${url}" onclick="event.stopPropagation();openLightbox('${url}')">`).join('')}${allScreens.length > 3 ? `<span style="font-size:11px;color:var(--text-muted);align-self:center;">+${allScreens.length - 3}</span>` : ''}</div>`
+      : '<span style="color:var(--text-muted);font-size:11px;">-</span>';
+
+    // Calculate RR for display
+    let rrText = '-';
+    if (t.entry && t.sl && t.tp) {
+      let risk, reward;
+      if (t.direction === 'long') { risk = t.entry - t.sl; reward = t.tp - t.entry; }
+      else { risk = t.sl - t.entry; reward = t.entry - t.tp; }
+      if (risk > 0 && reward > 0) rrText = `1:${(reward / risk).toFixed(1)}`;
+    }
+
     return `
-    <tr class="trade-row trade-${t.result}">
+    <tr class="trade-row trade-${t.result}" data-trade-id="${t.id}">
       <td>${formatDate(t.date)}</td>
       <td><strong>${escapeHtml(t.asset)}</strong></td>
       <td><span class="badge badge-${t.direction}">${t.direction.toUpperCase()}</span></td>
       <td>${t.entry}</td>
-      <td>${t.exit}</td>
-      <td>${t.quantity}</td>
-      <td class="pnl ${t.pnl >= 0 ? 'positive' : 'negative'}">${t.pnl >= 0 ? '+' : ''}$${t.pnl.toFixed(2)}</td>
-      <td><span class="badge badge-${t.result}">${resultLabel(t.result)}</span></td>
-      <td class="notes-cell">${escapeHtml(t.notes || '-')}</td>
+      <td>${t.sl || '-'}</td>
+      <td>${t.tp || '-'}</td>
+      <td>${t.exit || '-'}</td>
+      <td>${rrText}</td>
+      <td class="pnl ${(t.pnl || 0) >= 0 ? 'positive' : 'negative'}">${(t.pnl || 0) >= 0 ? '+' : ''}$${(t.pnl || 0).toFixed(2)}</td>
+      <td>${thumbsHtml}</td>
       <td class="actions-cell">
-        <button class="btn btn-sm btn-edit" onclick='openModal(${tradeJson})'>Editar</button>
-        <button class="btn btn-sm btn-delete" onclick="deleteTrade('${t.id}')">Eliminar</button>
+        <button class="btn btn-sm btn-delete" onclick="event.stopPropagation();deleteTrade('${t.id}')">Eliminar</button>
       </td>
     </tr>`;
   }).join('');
+
+  // Double-click to edit
+  tbody.querySelectorAll('.trade-row').forEach(row => {
+    row.addEventListener('dblclick', () => {
+      const trade = tradesCache.find(t => t.id === row.dataset.tradeId);
+      if (trade) openModal(trade);
+    });
+    row.style.cursor = 'pointer';
+  });
 }
 
 document.getElementById('filter-asset').addEventListener('input', renderTradesTable);
@@ -568,14 +918,32 @@ function renderWeekdayChart(trades) {
 const WEEKDAY_NAMES = ['Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab', 'Dom'];
 const MONTH_NAMES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
+function getTradesByDate(trades) {
+  const map = {};
+  trades.forEach(t => { if (!map[t.date]) map[t.date] = []; map[t.date].push(t); });
+  return map;
+}
+
+function dateStr(y, m, d) {
+  return `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+}
+
+const todayStr = new Date().toISOString().split('T')[0];
+
 function renderCalendar() {
+  if (calendarView === 'week') renderWeekView();
+  else if (calendarView === 'year') renderYearView();
+  else renderMonthView();
+}
+
+// ==================== MONTH VIEW ====================
+function renderMonthView() {
   const trades = getTrades();
   const grid = document.getElementById('calendar-grid');
   const titleEl = document.getElementById('calendar-month-year');
   titleEl.textContent = `${MONTH_NAMES[currentMonth]} ${currentYear}`;
 
-  const tradesByDate = {};
-  trades.forEach(t => { if (!tradesByDate[t.date]) tradesByDate[t.date] = []; tradesByDate[t.date].push(t); });
+  const tradesByDate = getTradesByDate(trades);
 
   const firstDay = new Date(currentYear, currentMonth, 1);
   let startDay = firstDay.getDay() - 1;
@@ -589,8 +957,8 @@ function renderCalendar() {
   for (let i = 0; i < startDay; i++) html += '<div class="calendar-cell empty"></div>';
 
   for (let day = 1; day <= daysInMonth; day++) {
-    const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    const dayTrades = tradesByDate[dateStr] || [];
+    const ds = dateStr(currentYear, currentMonth, day);
+    const dayTrades = tradesByDate[ds] || [];
     const dayPnl = dayTrades.reduce((sum, t) => sum + t.pnl, 0);
 
     let cellClass = 'calendar-cell';
@@ -599,9 +967,9 @@ function renderCalendar() {
       else if (dayPnl < 0) cellClass += ' day-loss';
       else cellClass += ' day-breakeven';
     }
-    if (dateStr === new Date().toISOString().split('T')[0]) cellClass += ' today';
+    if (ds === todayStr) cellClass += ' today';
 
-    html += `<div class="${cellClass}" data-date="${dateStr}"><span class="day-number">${day}</span>`;
+    html += `<div class="${cellClass}" data-date="${ds}"><span class="day-number">${day}</span>`;
     if (dayTrades.length > 0) {
       html += '<div class="day-trades-mini">';
       dayTrades.forEach(t => {
@@ -624,8 +992,187 @@ function renderCalendar() {
   });
 }
 
-document.getElementById('prev-month').addEventListener('click', () => { currentMonth--; if (currentMonth < 0) { currentMonth = 11; currentYear--; } renderCalendar(); });
-document.getElementById('next-month').addEventListener('click', () => { currentMonth++; if (currentMonth > 11) { currentMonth = 0; currentYear++; } renderCalendar(); });
+// ==================== WEEK VIEW ====================
+function renderWeekView() {
+  const trades = getTrades();
+  const grid = document.getElementById('calendar-grid');
+  const titleEl = document.getElementById('calendar-month-year');
+  const tradesByDate = getTradesByDate(trades);
+
+  const weekEnd = new Date(currentWeekStart);
+  weekEnd.setDate(weekEnd.getDate() + 6);
+
+  const startLabel = currentWeekStart.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+  const endLabel = weekEnd.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' });
+  titleEl.textContent = `${startLabel} - ${endLabel}`;
+
+  let html = '<div class="week-header-row">';
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(currentWeekStart);
+    d.setDate(d.getDate() + i);
+    html += `<div class="week-header-cell">${WEEKDAY_NAMES[i]}<span class="week-header-date">${d.getDate()}</span></div>`;
+  }
+  html += '</div><div class="week-grid">';
+
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(currentWeekStart);
+    d.setDate(d.getDate() + i);
+    const ds = dateStr(d.getFullYear(), d.getMonth(), d.getDate());
+    const dayTrades = tradesByDate[ds] || [];
+    const dayPnl = dayTrades.reduce((sum, t) => sum + t.pnl, 0);
+
+    let cellClass = 'week-cell';
+    if (dayTrades.length > 0) {
+      if (dayPnl > 0) cellClass += ' day-win';
+      else if (dayPnl < 0) cellClass += ' day-loss';
+      else cellClass += ' day-breakeven';
+    }
+    if (ds === todayStr) cellClass += ' today';
+
+    html += `<div class="${cellClass}" data-date="${ds}">`;
+    if (dayTrades.length > 0) {
+      dayTrades.forEach(t => {
+        const allScreens = [...(t.screenshotsPre || []), ...(t.screenshotsPost || [])];
+        html += `<div class="week-trade-item trade-${t.result}" data-trade-id="${t.id}">`;
+        html += `<div class="week-trade-asset">${escapeHtml(t.asset)} <span class="badge badge-${t.direction}" style="font-size:9px;padding:1px 4px;">${t.direction.toUpperCase()}</span></div>`;
+        html += `<div class="week-trade-pnl ${(t.pnl||0) >= 0 ? 'positive' : 'negative'}">${(t.pnl||0) >= 0 ? '+' : ''}$${(t.pnl||0).toFixed(2)}</div>`;
+        if (t.notesPre || t.notes) html += `<div class="week-trade-notes">${escapeHtml(t.notesPre || t.notes)}</div>`;
+        if (allScreens.length > 0) {
+          html += '<div class="week-trade-thumbs">';
+          allScreens.slice(0, 2).forEach(url => {
+            html += `<img class="week-trade-thumb" src="${url}" onclick="event.stopPropagation();openLightbox('${url}')">`;
+          });
+          if (allScreens.length > 2) html += `<span style="font-size:9px;color:var(--text-muted);">+${allScreens.length - 2}</span>`;
+          html += '</div>';
+        }
+        html += '</div>';
+      });
+      html += `<div class="day-summary" style="margin-top:8px;"><span class="${dayPnl >= 0 ? 'positive' : 'negative'}">${dayPnl >= 0 ? '+' : ''}$${dayPnl.toFixed(2)}</span></div>`;
+    }
+    html += '</div>';
+  }
+  html += '</div>';
+  grid.innerHTML = html;
+
+  // Double-click on trade item to edit
+  grid.querySelectorAll('.week-trade-item').forEach(item => {
+    item.addEventListener('dblclick', (e) => {
+      e.stopPropagation();
+      const trade = tradesCache.find(t => t.id === item.dataset.tradeId);
+      if (trade) openModal(trade);
+    });
+    item.style.cursor = 'pointer';
+  });
+
+  grid.querySelectorAll('.week-cell').forEach(cell => {
+    cell.addEventListener('click', (e) => {
+      if (e.target.closest('.week-trade-item')) return;
+      openModal();
+      document.getElementById('trade-date').value = cell.dataset.date;
+    });
+  });
+}
+
+// ==================== YEAR VIEW ====================
+function renderYearView() {
+  const trades = getTrades();
+  const grid = document.getElementById('calendar-grid');
+  const titleEl = document.getElementById('calendar-month-year');
+  titleEl.textContent = `${currentYear}`;
+
+  const tradesByDate = getTradesByDate(trades);
+
+  let html = '<div class="year-grid">';
+  for (let month = 0; month < 12; month++) {
+    const daysInMonth = new Date(currentYear, month + 1, 0).getDate();
+    let firstDayOfWeek = new Date(currentYear, month, 1).getDay() - 1;
+    if (firstDayOfWeek < 0) firstDayOfWeek = 6;
+
+    let monthPnl = 0;
+    let monthTradeCount = 0;
+
+    html += `<div class="year-month" data-month="${month}">`;
+    html += `<div class="year-month-title">${MONTH_NAMES[month].slice(0, 3)}</div>`;
+    html += '<div class="year-month-header">';
+    WEEKDAY_NAMES.forEach(d => { html += `<span>${d.charAt(0)}</span>`; });
+    html += '</div><div class="year-month-grid">';
+
+    for (let i = 0; i < firstDayOfWeek; i++) html += '<div class="year-day empty"></div>';
+
+    for (let day = 1; day <= daysInMonth; day++) {
+      const ds = dateStr(currentYear, month, day);
+      const dayTrades = tradesByDate[ds] || [];
+      const dayPnl = dayTrades.reduce((sum, t) => sum + t.pnl, 0);
+      monthPnl += dayPnl;
+      monthTradeCount += dayTrades.length;
+
+      let cls = 'year-day';
+      if (dayTrades.length > 0) {
+        if (dayPnl > 0) cls += ' day-win';
+        else if (dayPnl < 0) cls += ' day-loss';
+        else cls += ' day-breakeven';
+      }
+      if (ds === todayStr) cls += ' today';
+
+      const tooltip = dayTrades.length > 0
+        ? `${day}: ${dayTrades.length} op, ${dayPnl >= 0 ? '+' : ''}$${dayPnl.toFixed(2)}`
+        : `${day}`;
+      html += `<div class="${cls}" title="${tooltip}"></div>`;
+    }
+    html += '</div>';
+
+    if (monthTradeCount > 0) {
+      html += `<div class="year-month-summary"><span class="${monthPnl >= 0 ? 'positive' : 'negative'}">${monthPnl >= 0 ? '+' : ''}$${monthPnl.toFixed(2)}</span> <span style="color:var(--text-muted);font-size:10px;">(${monthTradeCount} ops)</span></div>`;
+    }
+    html += '</div>';
+  }
+  html += '</div>';
+  grid.innerHTML = html;
+
+  grid.querySelectorAll('.year-month').forEach(el => {
+    el.addEventListener('click', () => {
+      currentMonth = parseInt(el.dataset.month);
+      calendarView = 'month';
+      document.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
+      document.querySelector('.view-btn[data-view="month"]').classList.add('active');
+      renderCalendar();
+    });
+  });
+}
+
+// ==================== CALENDAR NAVIGATION ====================
+document.querySelectorAll('.view-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    calendarView = btn.dataset.view;
+    document.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    renderCalendar();
+  });
+});
+
+document.getElementById('prev-month').addEventListener('click', () => {
+  if (calendarView === 'week') {
+    currentWeekStart.setDate(currentWeekStart.getDate() - 7);
+  } else if (calendarView === 'year') {
+    currentYear--;
+  } else {
+    currentMonth--;
+    if (currentMonth < 0) { currentMonth = 11; currentYear--; }
+  }
+  renderCalendar();
+});
+
+document.getElementById('next-month').addEventListener('click', () => {
+  if (calendarView === 'week') {
+    currentWeekStart.setDate(currentWeekStart.getDate() + 7);
+  } else if (calendarView === 'year') {
+    currentYear++;
+  } else {
+    currentMonth++;
+    if (currentMonth > 11) { currentMonth = 0; currentYear++; }
+  }
+  renderCalendar();
+});
 
 // ==================== STATISTICS ====================
 function renderStats() {
