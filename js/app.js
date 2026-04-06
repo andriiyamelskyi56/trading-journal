@@ -777,28 +777,32 @@ form.addEventListener('submit', async (e) => {
     // Result is always set by the user
     trade.result = document.getElementById('trade-result').value || 'breakeven';
 
-    // Calculate P&L
+    // Calculate P&L — resultado determines the P&L logic
     if (pnlVal) {
       // Manual P&L entered by user
       trade.pnl = parseFloat(pnlVal);
-    } else if (trade.exit !== null) {
-      // P&L from actual exit price
-      if (direction === 'long') {
-        trade.pnl = (trade.exit - entry) * quantity;
-      } else {
-        trade.pnl = (entry - trade.exit) * quantity;
+    } else if (trade.result === 'loss') {
+      // Perdedora → P&L = -Riesgo (hit SL)
+      trade.pnl = riskAmount > 0 ? -riskAmount : 0;
+    } else if (trade.result === 'win') {
+      // Ganadora → P&L from exit price, or TP if no exit
+      if (trade.exit !== null) {
+        if (direction === 'long') {
+          trade.pnl = (trade.exit - entry) * quantity;
+        } else {
+          trade.pnl = (entry - trade.exit) * quantity;
+        }
+        trade.pnl = Math.round(trade.pnl * 100) / 100;
+      } else if (trade.tp && entry) {
+        if (direction === 'long') {
+          trade.pnl = Math.round((trade.tp - entry) * quantity * 100) / 100;
+        } else {
+          trade.pnl = Math.round((entry - trade.tp) * quantity * 100) / 100;
+        }
       }
-      trade.pnl = Math.round(trade.pnl * 100) / 100;
-    } else if (trade.result === 'loss' && riskAmount > 0) {
-      // No exit → loss = hit SL → P&L = -Risk
-      trade.pnl = -riskAmount;
-    } else if (trade.result === 'win' && trade.tp && entry) {
-      // No exit → win = hit TP → P&L from TP
-      if (direction === 'long') {
-        trade.pnl = Math.round((trade.tp - entry) * quantity * 100) / 100;
-      } else {
-        trade.pnl = Math.round((entry - trade.tp) * quantity * 100) / 100;
-      }
+    } else {
+      // Breakeven → P&L = 0
+      trade.pnl = 0;
     }
 
     // Upload pending images to Cloudinary
@@ -963,11 +967,11 @@ function renderDashboard() {
 
   const recent = [...trades].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 5);
   document.getElementById('recent-trades-body').innerHTML = recent.map(t => `
-    <tr>
+    <tr class="trade-row-${t.result}">
       <td>${formatDate(t.date)}</td>
       <td><strong>${escapeHtml(t.asset)}</strong></td>
       <td><span class="badge badge-${t.direction}">${t.direction.toUpperCase()}</span></td>
-      <td class="pnl ${t.pnl >= 0 ? 'positive' : 'negative'}">${t.pnl >= 0 ? '+' : ''}$${t.pnl.toFixed(2)}</td>
+      <td class="pnl ${(t.pnl || 0) >= 0 ? 'positive' : 'negative'}">${(t.pnl || 0) >= 0 ? '+' : ''}$${(t.pnl || 0).toFixed(2)}</td>
       <td><span class="badge badge-${t.result}">${resultLabel(t.result)}</span></td>
     </tr>
   `).join('');
