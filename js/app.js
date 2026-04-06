@@ -344,7 +344,20 @@ function subscribeTrades() {
 }
 
 function getTrades() {
-  return tradesCache;
+  return tradesCache.map(t => {
+    // Recalculate P&L based on result for display
+    const trade = { ...t };
+    if (trade.result === 'loss' && trade.risk > 0) {
+      trade.pnl = -trade.risk;
+    } else if (trade.result === 'breakeven') {
+      trade.pnl = 0;
+    } else if (trade.result === 'win') {
+      // Keep saved P&L for wins (from exit or TP)
+      if (typeof trade.pnl !== 'number') trade.pnl = 0;
+    }
+    if (typeof trade.pnl !== 'number') trade.pnl = 0;
+    return trade;
+  });
 }
 
 async function saveTrade(trade) {
