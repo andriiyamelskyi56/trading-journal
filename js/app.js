@@ -1308,11 +1308,11 @@ function renderStats() {
     if (t.result === 'win') assetData[t.asset].wins++;
   });
 
-  const bestAssets = Object.entries(assetData).sort((a, b) => b[1].pnl - a[1].pnl).slice(0, 5);
-  document.getElementById('stats-best-assets').innerHTML = bestAssets.length ? bestAssets.map(([asset, data]) => `<div class="stat-item"><span class="stat-name">${escapeHtml(asset)}</span><span class="stat-value positive">+$${data.pnl.toFixed(2)}</span><span class="stat-detail">${data.total} ops | WR: ${Math.round((data.wins / data.total) * 100)}%</span></div>`).join('') : '<p class="empty-msg">No hay datos</p>';
+  const bestAssets = Object.entries(assetData).filter(([, d]) => d.pnl > 0).sort((a, b) => b[1].pnl - a[1].pnl).slice(0, 5);
+  document.getElementById('stats-best-assets').innerHTML = bestAssets.length ? bestAssets.map(([asset, data]) => `<div class="stat-item"><span class="stat-name">${escapeHtml(asset)}</span><span class="stat-value positive">+$${data.pnl.toFixed(2)}</span><span class="stat-detail">${data.total} ops | WR: ${Math.round((data.wins / data.total) * 100)}%</span></div>`).join('') : '<p class="empty-msg">No hay activos con ganancias</p>';
 
-  const worstAssets = Object.entries(assetData).sort((a, b) => a[1].pnl - b[1].pnl).slice(0, 5);
-  document.getElementById('stats-worst-assets').innerHTML = worstAssets.length ? worstAssets.map(([asset, data]) => `<div class="stat-item"><span class="stat-name">${escapeHtml(asset)}</span><span class="stat-value negative">$${data.pnl.toFixed(2)}</span><span class="stat-detail">${data.total} ops | WR: ${Math.round((data.wins / data.total) * 100)}%</span></div>`).join('') : '<p class="empty-msg">No hay datos</p>';
+  const worstAssets = Object.entries(assetData).filter(([, d]) => d.pnl < 0).sort((a, b) => a[1].pnl - b[1].pnl).slice(0, 5);
+  document.getElementById('stats-worst-assets').innerHTML = worstAssets.length ? worstAssets.map(([asset, data]) => `<div class="stat-item"><span class="stat-name">${escapeHtml(asset)}</span><span class="stat-value negative">$${data.pnl.toFixed(2)}</span><span class="stat-detail">${data.total} ops | WR: ${Math.round((data.wins / data.total) * 100)}%</span></div>`).join('') : '<p class="empty-msg">No hay activos con perdidas</p>';
 
   const winRateAssets = Object.entries(assetData).filter(([, d]) => d.total >= 1).sort((a, b) => (b[1].wins / b[1].total) - (a[1].wins / a[1].total));
   document.getElementById('stats-winrate-asset').innerHTML = winRateAssets.length ? winRateAssets.map(([asset, data]) => { const wr = Math.round((data.wins / data.total) * 100); return `<div class="stat-item"><span class="stat-name">${escapeHtml(asset)}</span><div class="progress-bar"><div class="progress-fill" style="width:${wr}%"></div></div><span class="stat-value">${wr}%</span><span class="stat-detail">${data.wins}/${data.total}</span></div>`; }).join('') : '<p class="empty-msg">No hay datos</p>';
