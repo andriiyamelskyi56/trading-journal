@@ -409,9 +409,31 @@ function calcRR() {
   const entry = parseFloat(document.getElementById('trade-entry').value);
   const sl = parseFloat(document.getElementById('trade-sl').value);
   const tp = parseFloat(document.getElementById('trade-tp').value);
+  const qty = parseFloat(document.getElementById('trade-quantity').value) || 0;
   const dir = document.getElementById('trade-direction').value;
   const rrEl = document.getElementById('trade-rr');
+  const riskEl = document.getElementById('trade-risk');
+  const rewardEl = document.getElementById('trade-reward');
 
+  // Calculate risk in $
+  if (entry && sl && qty) {
+    const riskPrice = dir === 'long' ? entry - sl : sl - entry;
+    const riskMoney = Math.abs(riskPrice * qty);
+    riskEl.textContent = riskPrice > 0 ? `-$${riskMoney.toFixed(2)}` : 'SL invalido';
+  } else {
+    riskEl.textContent = '--';
+  }
+
+  // Calculate reward in $
+  if (entry && tp && qty) {
+    const rewardPrice = dir === 'long' ? tp - entry : entry - tp;
+    const rewardMoney = Math.abs(rewardPrice * qty);
+    rewardEl.textContent = rewardPrice > 0 ? `+$${rewardMoney.toFixed(2)}` : 'TP invalido';
+  } else {
+    rewardEl.textContent = '--';
+  }
+
+  // Calculate RR ratio
   if (!entry || !sl || !tp || entry === sl) { rrEl.textContent = '--'; return; }
 
   let risk, reward;
@@ -431,7 +453,7 @@ function calcRR() {
   rrEl.style.color = rr >= 2 ? 'var(--green)' : rr >= 1 ? 'var(--yellow)' : 'var(--red)';
 }
 
-['trade-entry', 'trade-sl', 'trade-tp', 'trade-direction'].forEach(id => {
+['trade-entry', 'trade-sl', 'trade-tp', 'trade-direction', 'trade-quantity'].forEach(id => {
   document.getElementById(id).addEventListener('input', calcRR);
   document.getElementById(id).addEventListener('change', calcRR);
 });
@@ -657,6 +679,8 @@ function openModal(trade = null) {
   existingScreensPost = [];
   document.getElementById('trade-rr').textContent = '--';
   document.getElementById('trade-rr').style.color = '';
+  document.getElementById('trade-risk').textContent = '--';
+  document.getElementById('trade-reward').textContent = '--';
   document.getElementById('trade-rr-actual').textContent = '--';
   document.getElementById('trade-rr-actual').style.color = '';
   document.getElementById('modal-title').textContent = 'Nueva Operacion';
@@ -738,19 +762,42 @@ form.addEventListener('submit', async (e) => {
       screenshotsPost: [...existingScreensPost],
     };
 
+    // Calculate Risk in $
+    let riskAmount = 0;
+    if (entry && trade.sl) {
+      if (direction === 'long') {
+        riskAmount = (entry - trade.sl) * quantity;
+      } else {
+        riskAmount = (trade.sl - entry) * quantity;
+      }
+      riskAmount = Math.round(Math.abs(riskAmount) * 100) / 100;
+    }
+    trade.risk = riskAmount;
+
     // Calculate P&L
     if (pnlVal) {
       trade.pnl = parseFloat(pnlVal);
     } else if (trade.exit !== null) {
+      // P&L from actual exit price
       if (direction === 'long') {
         trade.pnl = (trade.exit - entry) * quantity;
       } else {
         trade.pnl = (entry - trade.exit) * quantity;
       }
       trade.pnl = Math.round(trade.pnl * 100) / 100;
+    } else if (trade.result === 'loss' && riskAmount > 0) {
+      // No exit price but marked as loss → P&L = -Risk (hit SL)
+      trade.pnl = -riskAmount;
+    } else if (trade.result === 'win' && trade.tp && entry) {
+      // No exit price but marked as win → P&L from TP
+      if (direction === 'long') {
+        trade.pnl = Math.round((trade.tp - entry) * quantity * 100) / 100;
+      } else {
+        trade.pnl = Math.round((entry - trade.tp) * quantity * 100) / 100;
+      }
     }
 
-    // Auto-detect result based on P&L (always overrides dropdown)
+    // Auto-detect result based on P&L (always overrides if P&L exists)
     if (trade.pnl > 0) trade.result = 'win';
     else if (trade.pnl < 0) trade.result = 'loss';
     else trade.result = trade.result || 'breakeven';
@@ -854,6 +901,7 @@ function renderTradesTable() {
       <td>${t.tp || '-'}</td>
       <td>${t.exit || '-'}</td>
       <td>${rrText}</td>
+      <td class="negative">${t.risk ? '-$' + t.risk.toFixed(2) : '-'}</td>
       <td class="pnl ${(t.pnl || 0) >= 0 ? 'positive' : 'negative'}">${(t.pnl || 0) >= 0 ? '+' : ''}$${(t.pnl || 0).toFixed(2)}</td>
       <td>${thumbsHtml}</td>
       <td class="actions-cell">

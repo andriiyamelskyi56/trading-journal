@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Trading Journal</title>
-  <link rel="stylesheet" href="css/styles.css?v=8">
+  <link rel="stylesheet" href="css/styles.css?v=9">
 </head>
 <body>
   <!-- PANTALLA DE AUTH -->
@@ -255,6 +255,7 @@
               <th>TP</th>
               <th>Salida</th>
               <th>RR</th>
+              <th>Riesgo</th>
               <th>P&L</th>
               <th>Capturas</th>
               <th>Acciones</th>
@@ -356,6 +357,16 @@
               <div class="rr-display" id="trade-rr">--</div>
             </div>
           </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Riesgo ($)</label>
+              <div class="rr-display" id="trade-risk" style="color:var(--red);">--</div>
+            </div>
+            <div class="form-group">
+              <label>Beneficio potencial ($)</label>
+              <div class="rr-display" id="trade-reward" style="color:var(--green);">--</div>
+            </div>
+          </div>
           <div class="form-group full-width">
             <label for="trade-notes-pre">Notas Pre-Trade</label>
             <textarea id="trade-notes-pre" rows="2" placeholder="Plan, analisis, razon de entrada..."></textarea>
@@ -429,7 +440,7 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
-  <script src="js/firebase-config.js?v=8"></script>
-  <script src="js/app.js?v=8"></script>
+  <script src="js/firebase-config.js?v=9"></script>
+  <script src="js/app.js?v=9"></script>
 </body>
 </html>
