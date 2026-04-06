@@ -384,6 +384,7 @@ document.querySelectorAll('.nav-links a').forEach(link => {
     link.classList.add('active');
     document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
     document.getElementById(section).classList.add('active');
+    window.scrollTo(0, 0);
     refreshAll();
   });
 });

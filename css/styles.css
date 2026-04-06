@@ -647,13 +647,7 @@ a { color: var(--accent); text-decoration: none; }
   font-weight: 700;
 }
 
-@media (max-width: 768px) {
-  .year-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
-  .week-cell { min-height: 100px; padding: 6px; }
-  .week-header-cell .week-header-date { font-size: 14px; }
-  .view-buttons { gap: 2px; }
-  .view-btn { padding: 6px 12px; font-size: 12px; }
-}
+/* mobile overrides for calendar views are in the main mobile block below */
 
 /* ==================== STATISTICS ==================== */
 .stats-grid {
@@ -1007,31 +1001,122 @@ a { color: var(--accent); text-decoration: none; }
 }
 
 /* ==================== RESPONSIVE ==================== */
+/* ==================== MOBILE ==================== */
 @media (max-width: 768px) {
+  /* Sidebar: bottom nav bar */
   .sidebar {
-    width: 60px;
-    overflow: hidden;
+    width: 100%;
+    height: auto;
+    position: fixed;
+    top: auto;
+    bottom: 0;
+    left: 0;
+    flex-direction: row;
+    border-right: none;
+    border-top: 1px solid var(--border);
+    z-index: 200;
   }
 
-  .sidebar-header h1 { display: none; }
-  .nav-links a span:not(.nav-icon) { display: none; }
-  .nav-links a { justify-content: center; padding: 14px; }
+  .sidebar-header { display: none; }
+  .sidebar-footer { display: none; }
 
+  .nav-links {
+    display: flex;
+    width: 100%;
+    padding: 0;
+  }
+
+  .nav-links li { flex: 1; }
+
+  .nav-links a {
+    justify-content: center;
+    padding: 12px 4px;
+    font-size: 11px;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .nav-links a span:not(.nav-icon) { font-size: 9px; }
+  .nav-icon { font-size: 18px; }
+
+  /* Content: full width, bottom padding for nav */
   .content {
-    margin-left: 60px;
-    padding: 16px;
+    margin-left: 0;
+    width: 100%;
+    padding: 16px 12px 80px 12px;
   }
 
-  .dashboard-charts {
-    grid-template-columns: 1fr;
-  }
+  .section h2 { font-size: 20px; margin-bottom: 16px; }
+  .section-header { flex-direction: column; gap: 12px; align-items: flex-start; }
 
-  .form-row {
-    grid-template-columns: 1fr;
-  }
+  /* Cards */
+  .summary-cards { grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 16px; }
+  .card { padding: 12px; gap: 4px; }
+  .card-label { font-size: 10px; }
+  .card-value { font-size: 20px; }
 
-  .calendar-cell { min-height: 60px; padding: 4px; }
-  .day-trades-mini { display: none; }
+  /* Charts */
+  .dashboard-charts { grid-template-columns: 1fr; gap: 12px; margin-bottom: 16px; }
+  .chart-box { padding: 14px; }
+
+  /* Table: horizontal scroll */
+  .full-table { overflow-x: auto; }
+  .trades-table { min-width: 700px; }
+  .trades-table th, .trades-table td { padding: 8px 6px; font-size: 12px; }
+
+  /* Filters */
+  .filters { flex-direction: column; gap: 8px; }
+  .filters input, .filters select { width: 100%; }
+
+  /* Calendar month */
+  .calendar-controls { gap: 8px; flex-wrap: wrap; }
+  .calendar-title { font-size: 16px; min-width: auto; }
+  .calendar-cell { min-height: 50px; padding: 4px; }
+  .day-number { font-size: 11px; }
+  .day-trades-mini { gap: 2px; }
+  .mini-trade { width: 14px; height: 14px; font-size: 10px; }
+  .day-summary { font-size: 9px; }
+
+  /* Calendar week */
+  .week-cell { min-height: 80px; padding: 6px; }
+  .week-header-cell { padding: 8px 4px; font-size: 10px; }
+  .week-header-cell .week-header-date { font-size: 14px; }
+  .week-trade-item { padding: 4px 6px; font-size: 11px; }
+  .week-trade-asset { font-size: 10px; }
+  .week-trade-pnl { font-size: 10px; }
+  .week-trade-notes { font-size: 9px; }
+  .week-trade-thumb { width: 24px; height: 24px; }
+
+  /* Calendar year */
+  .year-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .year-month { padding: 8px; }
+  .year-month-title { font-size: 12px; }
+
+  /* View buttons */
+  .view-buttons { gap: 2px; }
+  .view-btn { padding: 6px 12px; font-size: 12px; }
+
+  /* Stats */
+  .stats-grid { grid-template-columns: 1fr; gap: 12px; }
+
+  /* Modal */
+  .modal { width: 100%; max-width: 100vw; border-radius: 12px 12px 0 0; max-height: 85vh; }
+  .modal-wide { width: 100%; }
+  .form-row { grid-template-columns: 1fr; }
+  .modal-tabs { gap: 0; }
+  .modal-tab { padding: 10px 16px; font-size: 13px; }
+
+  /* Upload */
+  .upload-thumb { width: 60px; height: 60px; }
+  .trade-thumb-lg { width: 40px; height: 40px; }
+
+  /* Bar charts */
+  .bar-label { width: 40px; font-size: 10px; }
+  .bar-value { width: 60px; font-size: 10px; }
+
+  /* Auth */
+  .auth-box { padding: 24px 16px; }
+  .auth-title { font-size: 22px; }
 }
 
 /* ==================== AUTH SCREEN ==================== */
