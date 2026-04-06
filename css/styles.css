@@ -376,12 +376,18 @@ a { color: var(--accent); text-decoration: none; }
   border: 1px solid var(--border);
   border-radius: var(--radius);
   overflow: hidden;
+  width: 100%;
+}
+
+#calendar {
+  max-width: 100%;
 }
 
 .calendar-header-row {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
   border-bottom: 1px solid var(--border);
+  width: 100%;
 }
 
 .calendar-header-cell {
@@ -396,6 +402,7 @@ a { color: var(--accent); text-decoration: none; }
 .calendar-body {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
+  width: 100%;
 }
 
 .calendar-cell {
