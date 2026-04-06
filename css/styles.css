@@ -98,7 +98,7 @@ a { color: var(--accent); text-decoration: none; }
   margin-left: var(--sidebar-w);
   flex: 1;
   padding: 32px;
-  max-width: 1200px;
+  width: calc(100% - var(--sidebar-w));
 }
 
 .section { display: none; }
@@ -399,8 +399,8 @@ a { color: var(--accent); text-decoration: none; }
 }
 
 .calendar-cell {
-  min-height: 100px;
-  padding: 8px;
+  min-height: 120px;
+  padding: 10px;
   border-right: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
   cursor: pointer;
