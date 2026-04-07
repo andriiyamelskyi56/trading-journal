@@ -1833,6 +1833,8 @@ let tvVolumeSeries = null;
 let currentChartSymbol = null;
 let currentChartRange = '1M';
 let currentChartType = 'stock';
+let chartWebSocket = null;
+let chartPollInterval = null;
 
 function getChartRangeParams(range) {
   const ranges = {
@@ -2086,6 +2088,9 @@ async function fetchBinanceCandles(symbol, range) {
 async function loadChart(symbol, type, range) {
   if (!symbol) return;
 
+  // Stop previous real-time connections
+  stopChartRealtime();
+
   currentChartSymbol = symbol;
   currentChartType = type;
   currentChartRange = range;
@@ -2146,6 +2151,105 @@ async function loadChart(symbol, type, range) {
   } else {
     document.getElementById('chart-detail-change').textContent = '--';
   }
+
+  // Start real-time updates
+  if (type === 'crypto') {
+    startCryptoWebSocket(symbol, range);
+  } else {
+    startStockPolling(symbol, type, range);
+  }
+}
+
+// ==================== REAL-TIME CHART UPDATES ====================
+function stopChartRealtime() {
+  if (chartWebSocket) {
+    chartWebSocket.close();
+    chartWebSocket = null;
+  }
+  if (chartPollInterval) {
+    clearInterval(chartPollInterval);
+    chartPollInterval = null;
+  }
+}
+
+function updateChartInfoBar(price, prevClose) {
+  if (price == null) return;
+  document.getElementById('chart-info-price').textContent = formatPrice(price);
+  document.getElementById('chart-detail-close').textContent = formatPrice(price);
+  if (prevClose) {
+    const change = price - prevClose;
+    const changePct = (change / prevClose) * 100;
+    const sign = change >= 0 ? '+' : '';
+    const el = document.getElementById('chart-info-change');
+    el.textContent = `${sign}${formatPrice(change)} (${sign}${changePct.toFixed(2)}%)`;
+    el.className = `chart-info-change ${change >= 0 ? 'positive' : 'negative'}`;
+    const chEl = document.getElementById('chart-detail-change');
+    chEl.textContent = `${sign}${changePct.toFixed(2)}%`;
+    chEl.style.color = change >= 0 ? 'var(--green)' : 'var(--red)';
+  }
+}
+
+function startCryptoWebSocket(symbol, range) {
+  const params = getBinanceInterval(range);
+  const wsSymbol = symbol.toLowerCase();
+  const wsUrl = `wss://stream.binance.com:9443/ws/${wsSymbol}@kline_${params.interval}`;
+
+  chartWebSocket = new WebSocket(wsUrl);
+
+  chartWebSocket.onmessage = (event) => {
+    const msg = JSON.parse(event.data);
+    const k = msg.k;
+    if (!k) return;
+
+    const candle = {
+      time: Math.floor(k.t / 1000),
+      open: parseFloat(k.o),
+      high: parseFloat(k.h),
+      low: parseFloat(k.l),
+      close: parseFloat(k.c),
+    };
+
+    const volume = {
+      time: candle.time,
+      value: parseFloat(k.v),
+      color: candle.close >= candle.open ? '#22c55e40' : '#ef444440',
+    };
+
+    tvCandleSeries.update(candle);
+    tvVolumeSeries.update(volume);
+
+    // Update info bar and details
+    updateChartInfoBar(candle.close, null);
+    document.getElementById('chart-detail-open').textContent = formatPrice(candle.open);
+    document.getElementById('chart-detail-high').textContent = formatPrice(candle.high);
+    document.getElementById('chart-detail-low').textContent = formatPrice(candle.low);
+    document.getElementById('chart-detail-volume').textContent = formatVolume(parseFloat(k.v));
+  };
+
+  chartWebSocket.onerror = (err) => {
+    console.warn('Chart WebSocket error:', err);
+  };
+}
+
+function startStockPolling(symbol, type, range) {
+  // Poll every 30 seconds for stock/forex updates
+  chartPollInterval = setInterval(async () => {
+    if (!document.getElementById('charts').classList.contains('active')) return;
+    if (currentChartSymbol !== symbol) return;
+
+    try {
+      const data = await fetchChartData(symbol, type, range);
+      if (data && data.candles.length > 0) {
+        const lastCandle = data.candles[data.candles.length - 1];
+        const lastVolume = data.volumes[data.volumes.length - 1];
+        tvCandleSeries.update(lastCandle);
+        tvVolumeSeries.update(lastVolume);
+        updateChartInfoBar(data.price, data.prevClose);
+      }
+    } catch (err) {
+      console.warn('Chart poll error:', err);
+    }
+  }, 30000);
 }
 
 // Chart event listeners
