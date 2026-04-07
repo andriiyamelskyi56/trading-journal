@@ -1650,53 +1650,75 @@ async function fetchQuotes() {
     }
   }
 
-  // Fetch stock/forex quotes via Yahoo Finance v8 chart API
+  // Fetch stock/forex quotes via Finnhub API (free, CORS-enabled)
   if (otherInstruments.length > 0) {
-    const corsProxies = [
-      url => `https://corsproxy.io/?${encodeURIComponent(url)}`,
-      url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-      url => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
-    ];
-
-    async function fetchWithProxy(url) {
-      for (const proxy of corsProxies) {
-        try {
-          const res = await fetch(proxy(url), { signal: AbortSignal.timeout(8000) });
-          if (res.ok) {
-            const text = await res.text();
-            return JSON.parse(text);
-          }
-        } catch (e) { /* try next proxy */ }
-      }
-      return null;
-    }
+    const FINNHUB_KEY = localStorage.getItem('finnhub_api_key') || 'demo';
 
     const stockQuotePromises = otherInstruments.map(async (inst) => {
       try {
-        const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(inst.symbol)}?interval=1d&range=1d`;
-        const data = await fetchWithProxy(yahooUrl);
-        if (data && data.chart && data.chart.result && data.chart.result[0]) {
-          const meta = data.chart.result[0].meta;
-          const price = meta.regularMarketPrice;
-          const prevClose = meta.previousClose || meta.chartPreviousClose;
-          const change = prevClose ? price - prevClose : null;
-          const changePercent = prevClose ? ((price - prevClose) / prevClose) * 100 : null;
-          return {
-            symbol: inst.symbol,
-            name: inst.name,
-            type: inst.type,
-            price: price != null ? price : null,
-            change: change,
-            changePercent: changePercent,
-            high: meta.regularMarketDayHigh != null ? meta.regularMarketDayHigh : null,
-            low: meta.regularMarketDayLow != null ? meta.regularMarketDayLow : null,
-            volume: meta.regularMarketVolume != null ? meta.regularMarketVolume : null,
-          };
+        // Try Finnhub first (CORS-enabled, no proxy needed)
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 8000);
+        const res = await fetch(
+          `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(inst.symbol)}&token=${FINNHUB_KEY}`,
+          { signal: controller.signal }
+        );
+        clearTimeout(timeoutId);
+        if (res.ok) {
+          const q = await res.json();
+          // Finnhub returns: c=current, d=change, dp=change%, h=high, l=low, pc=prevClose, o=open
+          if (q && q.c && q.c > 0) {
+            return {
+              symbol: inst.symbol,
+              name: inst.name,
+              type: inst.type,
+              price: q.c,
+              change: q.d,
+              changePercent: q.dp,
+              high: q.h || null,
+              low: q.l || null,
+              volume: null, // Finnhub quote doesn't include volume
+            };
+          }
         }
       } catch (err) {
-        console.error(`Stock quote error for ${inst.symbol}:`, err);
+        console.warn(`Finnhub error for ${inst.symbol}:`, err.message);
       }
-      // Fallback to cached data
+
+      // Fallback: try Yahoo Finance via CORS proxy
+      try {
+        const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(inst.symbol)}?interval=1d&range=1d`;
+        const controller2 = new AbortController();
+        const timeoutId2 = setTimeout(() => controller2.abort(), 8000);
+        const res2 = await fetch(
+          `https://corsproxy.io/?${yahooUrl}`,
+          { signal: controller2.signal }
+        );
+        clearTimeout(timeoutId2);
+        if (res2.ok) {
+          const data = await res2.json();
+          const meta = data?.chart?.result?.[0]?.meta;
+          if (meta && meta.regularMarketPrice) {
+            const price = meta.regularMarketPrice;
+            const prevClose = meta.previousClose || meta.chartPreviousClose;
+            return {
+              symbol: inst.symbol,
+              name: inst.name,
+              type: inst.type,
+              price: price,
+              change: prevClose ? price - prevClose : null,
+              changePercent: prevClose ? ((price - prevClose) / prevClose) * 100 : null,
+              high: meta.regularMarketDayHigh || null,
+              low: meta.regularMarketDayLow || null,
+              volume: meta.regularMarketVolume || null,
+            };
+          }
+        }
+      } catch (err2) {
+        console.warn(`Yahoo Finance error for ${inst.symbol}:`, err2.message);
+      }
+
+      // Final fallback to cached data
       const existing = quotesCache[inst.symbol];
       return {
         symbol: inst.symbol,
