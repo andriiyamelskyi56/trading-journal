@@ -393,6 +393,7 @@ document.querySelectorAll('.nav-links a').forEach(link => {
     window.scrollTo(0, 0);
     refreshAll();
     if (section === 'markets' && activeWatchlistId) fetchQuotes();
+    if (section === 'charts') populateChartSymbols();
   });
 });
 
@@ -1825,6 +1826,347 @@ function stopQuotesAutoRefresh() {
   if (quotesInterval) { clearInterval(quotesInterval); quotesInterval = null; }
 }
 
+// ==================== CHARTS SECTION ====================
+let tvChart = null;
+let tvCandleSeries = null;
+let tvVolumeSeries = null;
+let currentChartSymbol = null;
+let currentChartRange = '1M';
+let currentChartType = 'stock';
+
+function getChartRangeParams(range) {
+  const ranges = {
+    '1D': { interval: '5m', range: '1d' },
+    '5D': { interval: '15m', range: '5d' },
+    '1M': { interval: '1d', range: '1mo' },
+    '3M': { interval: '1d', range: '3mo' },
+    '6M': { interval: '1d', range: '6mo' },
+    '1Y': { interval: '1wk', range: '1y' },
+    '5Y': { interval: '1mo', range: '5y' },
+  };
+  return ranges[range] || ranges['1M'];
+}
+
+function getBinanceInterval(range) {
+  const map = {
+    '1D': { interval: '5m', limit: 288 },
+    '5D': { interval: '15m', limit: 480 },
+    '1M': { interval: '1d', limit: 30 },
+    '3M': { interval: '1d', limit: 90 },
+    '6M': { interval: '1d', limit: 180 },
+    '1Y': { interval: '1w', limit: 52 },
+    '5Y': { interval: '1M', limit: 60 },
+  };
+  return map[range] || map['1M'];
+}
+
+function populateChartSymbols() {
+  const select = document.getElementById('chart-symbol-select');
+  select.innerHTML = '<option value="">-- Seleccionar --</option>';
+
+  const allInstruments = [];
+  watchlistsCache.forEach(wl => {
+    if (wl.instruments) {
+      wl.instruments.forEach(inst => {
+        if (!allInstruments.find(i => i.symbol === inst.symbol)) {
+          allInstruments.push(inst);
+        }
+      });
+    }
+  });
+
+  if (allInstruments.length === 0) {
+    select.innerHTML = '<option value="">Añade instrumentos en Mercados</option>';
+    return;
+  }
+
+  const groups = { crypto: [], stock: [], forex: [] };
+  allInstruments.forEach(inst => {
+    const type = inst.type || 'stock';
+    if (!groups[type]) groups[type] = [];
+    groups[type].push(inst);
+  });
+
+  const labels = { crypto: 'Crypto', stock: 'Acciones', forex: 'Forex' };
+  Object.entries(groups).forEach(([type, instruments]) => {
+    if (instruments.length === 0) return;
+    const optgroup = document.createElement('optgroup');
+    optgroup.label = labels[type] || type;
+    instruments.forEach(inst => {
+      const opt = document.createElement('option');
+      opt.value = inst.symbol;
+      opt.textContent = `${inst.symbol} - ${inst.name}`;
+      opt.dataset.type = type;
+      select.appendChild(opt);
+    });
+    // Actually append to optgroup then select
+    instruments.forEach(inst => {
+      const opt = document.createElement('option');
+      opt.value = inst.symbol;
+      opt.textContent = `${inst.symbol} - ${inst.name}`;
+      opt.dataset.type = type;
+      optgroup.appendChild(opt);
+    });
+    select.appendChild(optgroup);
+  });
+
+  // Remove the individual options added outside optgroups
+  Array.from(select.querySelectorAll(':scope > option[data-type]')).forEach(o => o.remove());
+}
+
+function initChart() {
+  const container = document.getElementById('tv-chart-container');
+  container.innerHTML = '';
+
+  tvChart = LightweightCharts.createChart(container, {
+    width: container.clientWidth,
+    height: 500,
+    layout: {
+      background: { color: '#1a1d27' },
+      textColor: '#8a8fa8',
+    },
+    grid: {
+      vertLines: { color: '#2a2e3d' },
+      horzLines: { color: '#2a2e3d' },
+    },
+    crosshair: {
+      mode: LightweightCharts.CrosshairMode.Normal,
+    },
+    rightPriceScale: {
+      borderColor: '#2a2e3d',
+    },
+    timeScale: {
+      borderColor: '#2a2e3d',
+      timeVisible: true,
+      secondsVisible: false,
+    },
+  });
+
+  tvCandleSeries = tvChart.addCandlestickSeries({
+    upColor: '#22c55e',
+    downColor: '#ef4444',
+    borderDownColor: '#ef4444',
+    borderUpColor: '#22c55e',
+    wickDownColor: '#ef4444',
+    wickUpColor: '#22c55e',
+  });
+
+  tvVolumeSeries = tvChart.addHistogramSeries({
+    color: '#6366f180',
+    priceFormat: { type: 'volume' },
+    priceScaleId: '',
+  });
+  tvVolumeSeries.priceScale().applyOptions({
+    scaleMargins: { top: 0.8, bottom: 0 },
+  });
+
+  // Responsive resize
+  const resizeObserver = new ResizeObserver(() => {
+    tvChart.applyOptions({ width: container.clientWidth });
+  });
+  resizeObserver.observe(container);
+}
+
+async function fetchChartData(symbol, type, range) {
+  const params = getChartRangeParams(range);
+
+  if (type === 'crypto') {
+    return fetchBinanceCandles(symbol, range);
+  }
+
+  // Stocks/Forex: Yahoo Finance via CORS proxy
+  const corsProxies = [
+    url => `https://corsproxy.io/?${url}`,
+    url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+    url => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+  ];
+
+  const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=${params.interval}&range=${params.range}`;
+
+  for (const proxy of corsProxies) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+      const res = await fetch(proxy(yahooUrl), { signal: controller.signal });
+      clearTimeout(timeoutId);
+
+      if (!res.ok) continue;
+      const data = await res.json();
+      const result = data?.chart?.result?.[0];
+      if (!result) continue;
+
+      const timestamps = result.timestamp;
+      const ohlc = result.indicators?.quote?.[0];
+      if (!timestamps || !ohlc) continue;
+
+      const candles = [];
+      const volumes = [];
+      for (let i = 0; i < timestamps.length; i++) {
+        if (ohlc.open[i] == null) continue;
+        const time = timestamps[i];
+        candles.push({
+          time,
+          open: ohlc.open[i],
+          high: ohlc.high[i],
+          low: ohlc.low[i],
+          close: ohlc.close[i],
+        });
+        volumes.push({
+          time,
+          value: ohlc.volume[i] || 0,
+          color: ohlc.close[i] >= ohlc.open[i] ? '#22c55e40' : '#ef444440',
+        });
+      }
+
+      const meta = result.meta;
+      return {
+        candles,
+        volumes,
+        price: meta?.regularMarketPrice,
+        prevClose: meta?.previousClose || meta?.chartPreviousClose,
+        high: meta?.regularMarketDayHigh,
+        low: meta?.regularMarketDayLow,
+        open: candles.length > 0 ? candles[candles.length - 1].open : null,
+        close: meta?.regularMarketPrice,
+        volume: meta?.regularMarketVolume,
+      };
+    } catch (err) {
+      console.warn(`Chart proxy error for ${symbol}:`, err.message);
+    }
+  }
+  return null;
+}
+
+async function fetchBinanceCandles(symbol, range) {
+  const params = getBinanceInterval(range);
+  try {
+    const res = await fetch(
+      `https://api.binance.com/api/v3/klines?symbol=${encodeURIComponent(symbol)}&interval=${params.interval}&limit=${params.limit}`
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+
+    const candles = [];
+    const volumes = [];
+    data.forEach(k => {
+      const time = Math.floor(k[0] / 1000);
+      const open = parseFloat(k[1]);
+      const high = parseFloat(k[2]);
+      const low = parseFloat(k[3]);
+      const close = parseFloat(k[4]);
+      const vol = parseFloat(k[5]);
+
+      candles.push({ time, open, high, low, close });
+      volumes.push({
+        time,
+        value: vol,
+        color: close >= open ? '#22c55e40' : '#ef444440',
+      });
+    });
+
+    const last = candles[candles.length - 1];
+    const first = candles[0];
+    return {
+      candles,
+      volumes,
+      price: last?.close,
+      prevClose: first?.open,
+      high: last?.high,
+      low: last?.low,
+      open: last?.open,
+      close: last?.close,
+      volume: volumes.length > 0 ? volumes[volumes.length - 1].value : null,
+    };
+  } catch (err) {
+    console.error('Binance candles error:', err);
+    return null;
+  }
+}
+
+async function loadChart(symbol, type, range) {
+  if (!symbol) return;
+
+  currentChartSymbol = symbol;
+  currentChartType = type;
+  currentChartRange = range;
+
+  // Show loading
+  const container = document.getElementById('tv-chart-container');
+  if (!tvChart) initChart();
+
+  tvCandleSeries.setData([]);
+  tvVolumeSeries.setData([]);
+
+  document.getElementById('chart-info-symbol').textContent = symbol;
+  document.getElementById('chart-info-price').textContent = 'Cargando...';
+  document.getElementById('chart-info-change').textContent = '';
+  document.getElementById('chart-info-change').className = 'chart-info-change';
+
+  const data = await fetchChartData(symbol, type, range);
+
+  if (!data || data.candles.length === 0) {
+    document.getElementById('chart-info-price').textContent = 'Sin datos';
+    document.getElementById('chart-details-grid').style.display = 'none';
+    return;
+  }
+
+  tvCandleSeries.setData(data.candles);
+  tvVolumeSeries.setData(data.volumes);
+  tvChart.timeScale().fitContent();
+
+  // Update info bar
+  const price = data.price;
+  const prevClose = data.prevClose;
+  if (price != null) {
+    document.getElementById('chart-info-price').textContent = formatPrice(price);
+    if (prevClose) {
+      const change = price - prevClose;
+      const changePct = (change / prevClose) * 100;
+      const sign = change >= 0 ? '+' : '';
+      const el = document.getElementById('chart-info-change');
+      el.textContent = `${sign}${formatPrice(change)} (${sign}${changePct.toFixed(2)}%)`;
+      el.className = `chart-info-change ${change >= 0 ? 'positive' : 'negative'}`;
+    }
+  }
+
+  // Update details grid
+  const grid = document.getElementById('chart-details-grid');
+  grid.style.display = 'grid';
+  document.getElementById('chart-detail-open').textContent = data.open != null ? formatPrice(data.open) : '--';
+  document.getElementById('chart-detail-high').textContent = data.high != null ? formatPrice(data.high) : '--';
+  document.getElementById('chart-detail-low').textContent = data.low != null ? formatPrice(data.low) : '--';
+  document.getElementById('chart-detail-close').textContent = data.close != null ? formatPrice(data.close) : '--';
+  document.getElementById('chart-detail-volume').textContent = data.volume != null ? formatVolume(data.volume) : '--';
+  if (data.price != null && data.prevClose) {
+    const ch = data.price - data.prevClose;
+    const chPct = (ch / data.prevClose) * 100;
+    const el = document.getElementById('chart-detail-change');
+    el.textContent = `${ch >= 0 ? '+' : ''}${chPct.toFixed(2)}%`;
+    el.style.color = ch >= 0 ? 'var(--green)' : 'var(--red)';
+  } else {
+    document.getElementById('chart-detail-change').textContent = '--';
+  }
+}
+
+// Chart event listeners
+document.getElementById('chart-symbol-select').addEventListener('change', (e) => {
+  const opt = e.target.selectedOptions[0];
+  if (!opt || !opt.value) return;
+  const type = opt.dataset.type || 'stock';
+  loadChart(opt.value, type, currentChartRange);
+});
+
+document.getElementById('chart-range-btns').addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-range]');
+  if (!btn) return;
+  document.querySelectorAll('#chart-range-btns .btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  currentChartRange = btn.dataset.range;
+  if (currentChartSymbol) {
+    loadChart(currentChartSymbol, currentChartType, currentChartRange);
+  }
+});
+
 function refreshAll() {
   renderDashboard();
   renderCalendar();
@@ -1832,5 +2174,8 @@ function refreshAll() {
   renderStats();
   if (document.getElementById('markets').classList.contains('active') && activeWatchlistId) {
     fetchQuotes();
+  }
+  if (document.getElementById('charts').classList.contains('active')) {
+    populateChartSymbols();
   }
 }
