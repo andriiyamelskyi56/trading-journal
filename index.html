@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Trading Journal</title>
-  <link rel="stylesheet" href="css/styles.css?v=20">
+  <link rel="stylesheet" href="css/styles.css?v=21">
 </head>
 <body>
   <!-- PANTALLA DE AUTH -->
@@ -146,6 +146,9 @@
         </a></li>
         <li><a href="#" data-section="stats">
           <span class="nav-icon">&#128202;</span> Estadísticas
+        </a></li>
+        <li><a href="#" data-section="markets">
+          <span class="nav-icon">&#128176;</span> Mercados
         </a></li>
       </ul>
       <div class="sidebar-footer">
@@ -296,7 +299,89 @@
           </div>
         </div>
       </section>
+
+      <!-- MERCADOS / WATCHLISTS -->
+      <section id="markets" class="section">
+        <div class="section-header">
+          <h2>Mercados</h2>
+          <div class="markets-actions">
+            <button class="btn btn-primary" id="add-watchlist-btn">+ Nueva Lista</button>
+          </div>
+        </div>
+
+        <!-- Watchlist Tabs -->
+        <div class="watchlist-tabs" id="watchlist-tabs"></div>
+
+        <!-- Add instrument form -->
+        <div class="add-instrument-bar" id="add-instrument-bar" style="display:none;">
+          <div class="add-instrument-form">
+            <select id="instrument-type">
+              <option value="crypto">Crypto</option>
+              <option value="forex">Forex</option>
+              <option value="stock">Acciones</option>
+            </select>
+            <input type="text" id="instrument-symbol" placeholder="Ej: BTCUSDT, ETHUSDT..." autocomplete="off">
+            <input type="text" id="instrument-name" placeholder="Nombre (Bitcoin, Ethereum...)">
+            <button class="btn btn-primary btn-sm" id="add-instrument-btn">Añadir</button>
+          </div>
+          <div class="instrument-suggestions" id="instrument-suggestions"></div>
+        </div>
+
+        <!-- Quotes Table -->
+        <div class="quotes-container">
+          <div class="quotes-header">
+            <span class="quotes-refresh-info" id="quotes-refresh-info">Actualizado: --</span>
+            <button class="btn btn-sm" id="refresh-quotes-btn">&#8635; Actualizar</button>
+          </div>
+          <table class="trades-table quotes-table">
+            <thead>
+              <tr>
+                <th>Instrumento</th>
+                <th>Precio</th>
+                <th>Cambio 24h</th>
+                <th>% Cambio</th>
+                <th>Max 24h</th>
+                <th>Min 24h</th>
+                <th>Volumen</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="quotes-table-body">
+              <tr><td colspan="8" class="empty-msg">Selecciona o crea una lista para ver cotizaciones</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
     </main>
+  </div>
+
+  <!-- MODAL NUEVA LISTA -->
+  <div class="modal-overlay" id="watchlist-modal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="watchlist-modal-title">Nueva Lista</h3>
+        <button class="modal-close" id="watchlist-modal-close">&times;</button>
+      </div>
+      <form id="watchlist-form">
+        <div class="form-group">
+          <label for="watchlist-name">Nombre de la lista</label>
+          <input type="text" id="watchlist-name" placeholder="Ej: Mis Cryptos, Forex Majors..." required>
+        </div>
+        <div class="form-group">
+          <label for="watchlist-type">Tipo de instrumentos</label>
+          <select id="watchlist-type">
+            <option value="crypto">Crypto</option>
+            <option value="forex">Forex</option>
+            <option value="stock">Acciones</option>
+            <option value="mixed">Mixta</option>
+          </select>
+        </div>
+        <div class="form-actions">
+          <button type="button" class="btn" id="watchlist-modal-cancel">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Crear Lista</button>
+        </div>
+      </form>
+    </div>
   </div>
 
   <!-- MODAL NUEVA OPERACIÓN -->
@@ -440,7 +525,7 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
-  <script src="js/firebase-config.js?v=20"></script>
-  <script src="js/app.js?v=20"></script>
+  <script src="js/firebase-config.js?v=21"></script>
+  <script src="js/app.js?v=21"></script>
 </body>
 </html>

@@ -258,6 +258,8 @@ document.getElementById('reset-form').addEventListener('submit', async (e) => {
 // ==================== LOGOUT ====================
 document.getElementById('logout-btn').addEventListener('click', () => {
   if (unsubscribeTrades) { unsubscribeTrades(); unsubscribeTrades = null; }
+  if (unsubscribeWatchlists) { unsubscribeWatchlists(); unsubscribeWatchlists = null; }
+  stopQuotesAutoRefresh();
   auth.signOut();
 });
 
@@ -281,6 +283,8 @@ auth.onAuthStateChanged((user) => {
     appEl.style.display = 'none';
     showAuthView('welcome');
     if (unsubscribeTrades) { unsubscribeTrades(); unsubscribeTrades = null; }
+    if (typeof unsubscribeWatchlists !== 'undefined' && unsubscribeWatchlists) { unsubscribeWatchlists(); unsubscribeWatchlists = null; }
+    if (typeof stopQuotesAutoRefresh === 'function') stopQuotesAutoRefresh();
   }
 });
 
@@ -293,6 +297,8 @@ function enterApp(user) {
   document.getElementById('user-email').textContent = displayName;
 
   subscribeTrades();
+  subscribeWatchlists();
+  startQuotesAutoRefresh();
 }
 
 // ==================== HELPERS AUTH ====================
@@ -386,6 +392,7 @@ document.querySelectorAll('.nav-links a').forEach(link => {
     document.getElementById(section).classList.add('active');
     window.scrollTo(0, 0);
     refreshAll();
+    if (section === 'markets' && activeWatchlistId) fetchQuotes();
   });
 });
 
@@ -1366,9 +1373,393 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
+// ==================== MARKETS / WATCHLISTS ====================
+let watchlistsCache = [];
+let activeWatchlistId = null;
+let quotesCache = {};
+let quotesInterval = null;
+let unsubscribeWatchlists = null;
+
+// Popular instruments suggestions
+const POPULAR_INSTRUMENTS = {
+  crypto: [
+    { symbol: 'BTCUSDT', name: 'Bitcoin' },
+    { symbol: 'ETHUSDT', name: 'Ethereum' },
+    { symbol: 'BNBUSDT', name: 'BNB' },
+    { symbol: 'SOLUSDT', name: 'Solana' },
+    { symbol: 'XRPUSDT', name: 'XRP' },
+    { symbol: 'ADAUSDT', name: 'Cardano' },
+    { symbol: 'DOGEUSDT', name: 'Dogecoin' },
+    { symbol: 'DOTUSDT', name: 'Polkadot' },
+    { symbol: 'AVAXUSDT', name: 'Avalanche' },
+    { symbol: 'MATICUSDT', name: 'Polygon' },
+    { symbol: 'LINKUSDT', name: 'Chainlink' },
+    { symbol: 'LTCUSDT', name: 'Litecoin' },
+  ],
+  forex: [
+    { symbol: 'EURUSDT', name: 'EUR/USD' },
+    { symbol: 'GBPUSDT', name: 'GBP/USD' },
+    { symbol: 'JPYUSDT', name: 'JPY/USD' },
+  ],
+  stock: [
+    { symbol: 'AAPL', name: 'Apple' },
+    { symbol: 'MSFT', name: 'Microsoft' },
+    { symbol: 'GOOGL', name: 'Google' },
+    { symbol: 'TSLA', name: 'Tesla' },
+    { symbol: 'AMZN', name: 'Amazon' },
+    { symbol: 'NVDA', name: 'NVIDIA' },
+  ],
+};
+
+function userWatchlistsRef() {
+  return db.collection('users').doc(currentUser.uid).collection('watchlists');
+}
+
+function subscribeWatchlists() {
+  if (unsubscribeWatchlists) unsubscribeWatchlists();
+  unsubscribeWatchlists = userWatchlistsRef().orderBy('createdAt').onSnapshot((snapshot) => {
+    watchlistsCache = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    renderWatchlistTabs();
+    if (activeWatchlistId) {
+      const exists = watchlistsCache.find(w => w.id === activeWatchlistId);
+      if (!exists && watchlistsCache.length > 0) {
+        activeWatchlistId = watchlistsCache[0].id;
+      } else if (!exists) {
+        activeWatchlistId = null;
+      }
+    } else if (watchlistsCache.length > 0) {
+      activeWatchlistId = watchlistsCache[0].id;
+    }
+    renderWatchlistTabs();
+    if (activeWatchlistId) fetchQuotes();
+  });
+}
+
+function renderWatchlistTabs() {
+  const container = document.getElementById('watchlist-tabs');
+  const addBar = document.getElementById('add-instrument-bar');
+
+  if (watchlistsCache.length === 0) {
+    container.innerHTML = '<p style="color:var(--text-muted);font-size:13px;">No tienes listas. Crea una para empezar a seguir instrumentos.</p>';
+    addBar.style.display = 'none';
+    document.getElementById('quotes-table-body').innerHTML = '<tr><td colspan="8" class="empty-msg">Crea una lista para ver cotizaciones</td></tr>';
+    return;
+  }
+
+  container.innerHTML = watchlistsCache.map(w => {
+    const instruments = w.instruments || [];
+    const isActive = w.id === activeWatchlistId;
+    return `<button class="watchlist-tab ${isActive ? 'active' : ''}" data-wl-id="${w.id}">
+      ${escapeHtml(w.name)}
+      <span class="tab-count">${instruments.length}</span>
+      <span class="watchlist-tab-delete" data-wl-delete="${w.id}" title="Eliminar lista">&times;</span>
+    </button>`;
+  }).join('');
+
+  addBar.style.display = activeWatchlistId ? 'block' : 'none';
+
+  // Show suggestions for active watchlist type
+  const activeWl = watchlistsCache.find(w => w.id === activeWatchlistId);
+  if (activeWl) {
+    const type = activeWl.type || 'crypto';
+    document.getElementById('instrument-type').value = type === 'mixed' ? 'crypto' : type;
+    renderInstrumentSuggestions(type, activeWl.instruments || []);
+  }
+
+  // Tab click handlers
+  container.querySelectorAll('.watchlist-tab').forEach(tab => {
+    tab.addEventListener('click', (e) => {
+      if (e.target.closest('.watchlist-tab-delete')) return;
+      activeWatchlistId = tab.dataset.wlId;
+      renderWatchlistTabs();
+      fetchQuotes();
+    });
+  });
+
+  // Delete watchlist
+  container.querySelectorAll('.watchlist-tab-delete').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if (!confirm('Eliminar esta lista?')) return;
+      try {
+        await userWatchlistsRef().doc(btn.dataset.wlDelete).delete();
+        if (activeWatchlistId === btn.dataset.wlDelete) {
+          activeWatchlistId = watchlistsCache.length > 1 ? watchlistsCache.find(w => w.id !== btn.dataset.wlDelete)?.id : null;
+        }
+      } catch (err) {
+        alert('Error: ' + err.message);
+      }
+    });
+  });
+}
+
+function renderInstrumentSuggestions(type, existingInstruments) {
+  const container = document.getElementById('instrument-suggestions');
+  const suggestions = POPULAR_INSTRUMENTS[type === 'mixed' ? 'crypto' : type] || [];
+  const existingSymbols = existingInstruments.map(i => i.symbol);
+
+  const filtered = suggestions.filter(s => !existingSymbols.includes(s.symbol));
+  if (filtered.length === 0) {
+    container.innerHTML = '';
+    return;
+  }
+
+  container.innerHTML = '<span style="font-size:11px;color:var(--text-muted);width:100%;margin-bottom:2px;">Sugerencias:</span>' +
+    filtered.map(s => `<button type="button" class="instrument-suggestion" data-sym="${s.symbol}" data-name="${s.name}">+ ${s.name} (${s.symbol})</button>`).join('');
+
+  container.querySelectorAll('.instrument-suggestion').forEach(btn => {
+    btn.addEventListener('click', () => {
+      addInstrumentToWatchlist(btn.dataset.sym, btn.dataset.name);
+    });
+  });
+}
+
+// Watchlist modal
+const watchlistModal = document.getElementById('watchlist-modal');
+const watchlistForm = document.getElementById('watchlist-form');
+
+document.getElementById('add-watchlist-btn').addEventListener('click', () => {
+  watchlistModal.classList.add('open');
+  document.getElementById('watchlist-name').value = '';
+  document.getElementById('watchlist-name').focus();
+});
+
+document.getElementById('watchlist-modal-close').addEventListener('click', () => watchlistModal.classList.remove('open'));
+document.getElementById('watchlist-modal-cancel').addEventListener('click', () => watchlistModal.classList.remove('open'));
+watchlistModal.addEventListener('click', (e) => { if (e.target === watchlistModal) watchlistModal.classList.remove('open'); });
+
+watchlistForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const name = document.getElementById('watchlist-name').value.trim();
+  const type = document.getElementById('watchlist-type').value;
+  if (!name) return;
+
+  try {
+    const docRef = await userWatchlistsRef().add({
+      name,
+      type,
+      instruments: [],
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+    });
+    activeWatchlistId = docRef.id;
+    watchlistModal.classList.remove('open');
+  } catch (err) {
+    alert('Error: ' + err.message);
+  }
+});
+
+// Add instrument
+document.getElementById('add-instrument-btn').addEventListener('click', () => {
+  const symbol = document.getElementById('instrument-symbol').value.trim().toUpperCase();
+  const name = document.getElementById('instrument-name').value.trim() || symbol;
+  if (!symbol) return;
+  addInstrumentToWatchlist(symbol, name);
+});
+
+document.getElementById('instrument-symbol').addEventListener('keypress', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    document.getElementById('add-instrument-btn').click();
+  }
+});
+
+async function addInstrumentToWatchlist(symbol, name) {
+  if (!activeWatchlistId) return;
+
+  const wl = watchlistsCache.find(w => w.id === activeWatchlistId);
+  if (!wl) return;
+
+  const instruments = wl.instruments || [];
+  if (instruments.find(i => i.symbol === symbol)) {
+    alert('Este instrumento ya esta en la lista');
+    return;
+  }
+
+  const type = document.getElementById('instrument-type').value;
+
+  try {
+    await userWatchlistsRef().doc(activeWatchlistId).update({
+      instruments: firebase.firestore.FieldValue.arrayUnion({ symbol, name, type }),
+    });
+    document.getElementById('instrument-symbol').value = '';
+    document.getElementById('instrument-name').value = '';
+  } catch (err) {
+    alert('Error: ' + err.message);
+  }
+}
+
+async function removeInstrumentFromWatchlist(symbol) {
+  if (!activeWatchlistId) return;
+  const wl = watchlistsCache.find(w => w.id === activeWatchlistId);
+  if (!wl) return;
+
+  const instrument = (wl.instruments || []).find(i => i.symbol === symbol);
+  if (!instrument) return;
+
+  try {
+    await userWatchlistsRef().doc(activeWatchlistId).update({
+      instruments: firebase.firestore.FieldValue.arrayRemove(instrument),
+    });
+  } catch (err) {
+    alert('Error: ' + err.message);
+  }
+}
+
+// ==================== FETCH QUOTES ====================
+async function fetchQuotes() {
+  const wl = watchlistsCache.find(w => w.id === activeWatchlistId);
+  if (!wl || !wl.instruments || wl.instruments.length === 0) {
+    renderQuotes([]);
+    return;
+  }
+
+  const tbody = document.getElementById('quotes-table-body');
+  tbody.innerHTML = '<tr><td colspan="8" class="quote-loading"><div class="spinner" style="margin:0 auto;width:24px;height:24px;"></div> Cargando cotizaciones...</td></tr>';
+
+  const instruments = wl.instruments;
+  const quotes = [];
+
+  // Group by type
+  const cryptoSymbols = instruments.filter(i => i.type === 'crypto').map(i => i.symbol);
+  const otherInstruments = instruments.filter(i => i.type !== 'crypto');
+
+  // Fetch crypto from Binance
+  if (cryptoSymbols.length > 0) {
+    try {
+      const symbols = JSON.stringify(cryptoSymbols);
+      const res = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbols=${encodeURIComponent(symbols)}`);
+      if (res.ok) {
+        const data = await res.json();
+        data.forEach(ticker => {
+          const instrument = instruments.find(i => i.symbol === ticker.symbol);
+          quotes.push({
+            symbol: ticker.symbol,
+            name: instrument ? instrument.name : ticker.symbol,
+            type: 'crypto',
+            price: parseFloat(ticker.lastPrice),
+            change: parseFloat(ticker.priceChange),
+            changePercent: parseFloat(ticker.priceChangePercent),
+            high: parseFloat(ticker.highPrice),
+            low: parseFloat(ticker.lowPrice),
+            volume: parseFloat(ticker.quoteVolume),
+          });
+        });
+      }
+    } catch (err) {
+      console.error('Binance API error:', err);
+    }
+  }
+
+  // For non-crypto, show placeholder with the info we have
+  otherInstruments.forEach(inst => {
+    const existing = quotesCache[inst.symbol];
+    quotes.push({
+      symbol: inst.symbol,
+      name: inst.name,
+      type: inst.type,
+      price: existing ? existing.price : null,
+      change: existing ? existing.change : null,
+      changePercent: existing ? existing.changePercent : null,
+      high: existing ? existing.high : null,
+      low: existing ? existing.low : null,
+      volume: existing ? existing.volume : null,
+      noData: !existing,
+    });
+  });
+
+  // Update cache
+  quotes.forEach(q => { quotesCache[q.symbol] = q; });
+
+  renderQuotes(quotes);
+  document.getElementById('quotes-refresh-info').textContent = `Actualizado: ${new Date().toLocaleTimeString('es-ES')}`;
+}
+
+function renderQuotes(quotes) {
+  const tbody = document.getElementById('quotes-table-body');
+
+  if (quotes.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="8" class="empty-msg">Añade instrumentos a esta lista para ver cotizaciones</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = quotes.map(q => {
+    const priceStr = q.price !== null ? formatPrice(q.price) : '--';
+    const changeStr = q.change !== null ? (q.change >= 0 ? '+' : '') + formatPrice(q.change) : '--';
+    const changePctStr = q.changePercent !== null ? (q.changePercent >= 0 ? '+' : '') + q.changePercent.toFixed(2) + '%' : '--';
+    const highStr = q.high !== null ? formatPrice(q.high) : '--';
+    const lowStr = q.low !== null ? formatPrice(q.low) : '--';
+    const volStr = q.volume !== null ? formatVolume(q.volume) : '--';
+    const changeClass = q.changePercent !== null ? (q.changePercent >= 0 ? 'positive' : 'negative') : '';
+    const badgeClass = q.changePercent !== null ? (q.changePercent >= 0 ? 'positive' : 'negative') : '';
+    const arrow = q.changePercent !== null ? (q.changePercent >= 0 ? '&#9650;' : '&#9660;') : '';
+    const icon = q.name ? q.name.charAt(0).toUpperCase() : q.symbol.charAt(0);
+
+    return `
+    <tr data-quote-symbol="${q.symbol}">
+      <td>
+        <div class="quote-symbol">
+          <div class="quote-symbol-icon">${icon}</div>
+          <div class="quote-symbol-info">
+            <span class="quote-symbol-ticker">${escapeHtml(q.symbol)}</span>
+            <span class="quote-symbol-name">${escapeHtml(q.name)} <span class="badge" style="font-size:9px;padding:1px 4px;">${q.type.toUpperCase()}</span></span>
+          </div>
+        </div>
+      </td>
+      <td class="quote-price">${priceStr}</td>
+      <td class="${changeClass}" style="font-weight:600;">${changeStr}</td>
+      <td><span class="quote-change-badge ${badgeClass}">${arrow} ${changePctStr}</span></td>
+      <td>${highStr}</td>
+      <td>${lowStr}</td>
+      <td class="quote-volume">${volStr}</td>
+      <td>
+        <button class="btn btn-sm btn-delete" data-remove-symbol="${q.symbol}" title="Quitar de la lista">&#10005;</button>
+      </td>
+    </tr>`;
+  }).join('');
+
+  // Remove instrument click
+  tbody.querySelectorAll('[data-remove-symbol]').forEach(btn => {
+    btn.addEventListener('click', () => removeInstrumentFromWatchlist(btn.dataset.removeSymbol));
+  });
+}
+
+function formatPrice(price) {
+  if (price >= 1000) return price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  if (price >= 1) return price.toFixed(4);
+  if (price >= 0.01) return price.toFixed(6);
+  return price.toFixed(8);
+}
+
+function formatVolume(vol) {
+  if (vol >= 1e9) return (vol / 1e9).toFixed(2) + 'B';
+  if (vol >= 1e6) return (vol / 1e6).toFixed(2) + 'M';
+  if (vol >= 1e3) return (vol / 1e3).toFixed(1) + 'K';
+  return vol.toFixed(0);
+}
+
+// Refresh quotes button
+document.getElementById('refresh-quotes-btn').addEventListener('click', fetchQuotes);
+
+// Auto-refresh quotes every 30 seconds when Markets section is active
+function startQuotesAutoRefresh() {
+  stopQuotesAutoRefresh();
+  quotesInterval = setInterval(() => {
+    if (document.getElementById('markets').classList.contains('active') && activeWatchlistId) {
+      fetchQuotes();
+    }
+  }, 30000);
+}
+
+function stopQuotesAutoRefresh() {
+  if (quotesInterval) { clearInterval(quotesInterval); quotesInterval = null; }
+}
+
 function refreshAll() {
   renderDashboard();
   renderCalendar();
   renderTradesTable();
   renderStats();
+  if (document.getElementById('markets').classList.contains('active') && activeWatchlistId) {
+    fetchQuotes();
+  }
 }
