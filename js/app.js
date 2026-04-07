@@ -1650,22 +1650,55 @@ async function fetchQuotes() {
     }
   }
 
-  // For non-crypto, show placeholder with the info we have
-  otherInstruments.forEach(inst => {
-    const existing = quotesCache[inst.symbol];
-    quotes.push({
-      symbol: inst.symbol,
-      name: inst.name,
-      type: inst.type,
-      price: existing ? existing.price : null,
-      change: existing ? existing.change : null,
-      changePercent: existing ? existing.changePercent : null,
-      high: existing ? existing.high : null,
-      low: existing ? existing.low : null,
-      volume: existing ? existing.volume : null,
-      noData: !existing,
+  // Fetch stock/forex quotes via Yahoo Finance
+  if (otherInstruments.length > 0) {
+    try {
+      const stockSymbols = otherInstruments.map(i => i.symbol).join(',');
+      const yahooUrl = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${stockSymbols}`;
+      const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(yahooUrl)}`;
+      const res = await fetch(proxyUrl);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.quoteResponse && data.quoteResponse.result) {
+          data.quoteResponse.result.forEach(q => {
+            const inst = otherInstruments.find(i => i.symbol === q.symbol);
+            quotes.push({
+              symbol: q.symbol,
+              name: inst ? inst.name : (q.shortName || q.symbol),
+              type: inst ? inst.type : 'stock',
+              price: q.regularMarketPrice != null ? q.regularMarketPrice : null,
+              change: q.regularMarketChange != null ? q.regularMarketChange : null,
+              changePercent: q.regularMarketChangePercent != null ? q.regularMarketChangePercent : null,
+              high: q.regularMarketDayHigh != null ? q.regularMarketDayHigh : null,
+              low: q.regularMarketDayLow != null ? q.regularMarketDayLow : null,
+              volume: q.regularMarketVolume != null ? q.regularMarketVolume : null,
+            });
+          });
+        }
+      }
+    } catch (err) {
+      console.error('Stock quote API error:', err);
+    }
+
+    // Add placeholders for any symbols not returned by the API
+    otherInstruments.forEach(inst => {
+      if (!quotes.find(q => q.symbol === inst.symbol)) {
+        const existing = quotesCache[inst.symbol];
+        quotes.push({
+          symbol: inst.symbol,
+          name: inst.name,
+          type: inst.type,
+          price: existing ? existing.price : null,
+          change: existing ? existing.change : null,
+          changePercent: existing ? existing.changePercent : null,
+          high: existing ? existing.high : null,
+          low: existing ? existing.low : null,
+          volume: existing ? existing.volume : null,
+          noData: !existing,
+        });
+      }
     });
-  });
+  }
 
   // Update cache
   quotes.forEach(q => { quotesCache[q.symbol] = q; });
