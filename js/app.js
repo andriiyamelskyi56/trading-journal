@@ -1650,54 +1650,70 @@ async function fetchQuotes() {
     }
   }
 
-  // Fetch stock/forex quotes via Yahoo Finance
+  // Fetch stock/forex quotes via Yahoo Finance v8 chart API
   if (otherInstruments.length > 0) {
-    try {
-      const stockSymbols = otherInstruments.map(i => i.symbol).join(',');
-      const yahooUrl = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${stockSymbols}`;
-      const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(yahooUrl)}`;
-      const res = await fetch(proxyUrl);
-      if (res.ok) {
-        const data = await res.json();
-        if (data.quoteResponse && data.quoteResponse.result) {
-          data.quoteResponse.result.forEach(q => {
-            const inst = otherInstruments.find(i => i.symbol === q.symbol);
-            quotes.push({
-              symbol: q.symbol,
-              name: inst ? inst.name : (q.shortName || q.symbol),
-              type: inst ? inst.type : 'stock',
-              price: q.regularMarketPrice != null ? q.regularMarketPrice : null,
-              change: q.regularMarketChange != null ? q.regularMarketChange : null,
-              changePercent: q.regularMarketChangePercent != null ? q.regularMarketChangePercent : null,
-              high: q.regularMarketDayHigh != null ? q.regularMarketDayHigh : null,
-              low: q.regularMarketDayLow != null ? q.regularMarketDayLow : null,
-              volume: q.regularMarketVolume != null ? q.regularMarketVolume : null,
-            });
-          });
-        }
+    const corsProxies = [
+      url => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+      url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+      url => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+    ];
+
+    async function fetchWithProxy(url) {
+      for (const proxy of corsProxies) {
+        try {
+          const res = await fetch(proxy(url), { signal: AbortSignal.timeout(8000) });
+          if (res.ok) {
+            const text = await res.text();
+            return JSON.parse(text);
+          }
+        } catch (e) { /* try next proxy */ }
       }
-    } catch (err) {
-      console.error('Stock quote API error:', err);
+      return null;
     }
 
-    // Add placeholders for any symbols not returned by the API
-    otherInstruments.forEach(inst => {
-      if (!quotes.find(q => q.symbol === inst.symbol)) {
-        const existing = quotesCache[inst.symbol];
-        quotes.push({
-          symbol: inst.symbol,
-          name: inst.name,
-          type: inst.type,
-          price: existing ? existing.price : null,
-          change: existing ? existing.change : null,
-          changePercent: existing ? existing.changePercent : null,
-          high: existing ? existing.high : null,
-          low: existing ? existing.low : null,
-          volume: existing ? existing.volume : null,
-          noData: !existing,
-        });
+    const stockQuotePromises = otherInstruments.map(async (inst) => {
+      try {
+        const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(inst.symbol)}?interval=1d&range=1d`;
+        const data = await fetchWithProxy(yahooUrl);
+        if (data && data.chart && data.chart.result && data.chart.result[0]) {
+          const meta = data.chart.result[0].meta;
+          const price = meta.regularMarketPrice;
+          const prevClose = meta.previousClose || meta.chartPreviousClose;
+          const change = prevClose ? price - prevClose : null;
+          const changePercent = prevClose ? ((price - prevClose) / prevClose) * 100 : null;
+          return {
+            symbol: inst.symbol,
+            name: inst.name,
+            type: inst.type,
+            price: price != null ? price : null,
+            change: change,
+            changePercent: changePercent,
+            high: meta.regularMarketDayHigh != null ? meta.regularMarketDayHigh : null,
+            low: meta.regularMarketDayLow != null ? meta.regularMarketDayLow : null,
+            volume: meta.regularMarketVolume != null ? meta.regularMarketVolume : null,
+          };
+        }
+      } catch (err) {
+        console.error(`Stock quote error for ${inst.symbol}:`, err);
       }
+      // Fallback to cached data
+      const existing = quotesCache[inst.symbol];
+      return {
+        symbol: inst.symbol,
+        name: inst.name,
+        type: inst.type,
+        price: existing ? existing.price : null,
+        change: existing ? existing.change : null,
+        changePercent: existing ? existing.changePercent : null,
+        high: existing ? existing.high : null,
+        low: existing ? existing.low : null,
+        volume: existing ? existing.volume : null,
+        noData: !existing,
+      };
     });
+
+    const stockQuotes = await Promise.all(stockQuotePromises);
+    quotes.push(...stockQuotes);
   }
 
   // Update cache
