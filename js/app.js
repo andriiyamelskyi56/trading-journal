@@ -1755,11 +1755,12 @@ function renderQuotes(quotes) {
   }
 
   tbody.innerHTML = quotes.map(q => {
-    const priceStr = q.price !== null ? formatPrice(q.price) : '--';
-    const changeStr = q.change !== null ? (q.change >= 0 ? '+' : '') + formatPrice(q.change) : '--';
+    const t = q.type;
+    const priceStr = q.price !== null ? formatPrice(q.price, t) : '--';
+    const changeStr = q.change !== null ? (q.change >= 0 ? '+' : '') + formatPrice(q.change, t) : '--';
     const changePctStr = q.changePercent !== null ? (q.changePercent >= 0 ? '+' : '') + q.changePercent.toFixed(2) + '%' : '--';
-    const highStr = q.high !== null ? formatPrice(q.high) : '--';
-    const lowStr = q.low !== null ? formatPrice(q.low) : '--';
+    const highStr = q.high !== null ? formatPrice(q.high, t) : '--';
+    const lowStr = q.low !== null ? formatPrice(q.low, t) : '--';
     const volStr = q.volume !== null ? formatVolume(q.volume) : '--';
     const changeClass = q.changePercent !== null ? (q.changePercent >= 0 ? 'positive' : 'negative') : '';
     const badgeClass = q.changePercent !== null ? (q.changePercent >= 0 ? 'positive' : 'negative') : '';
@@ -1795,7 +1796,14 @@ function renderQuotes(quotes) {
   });
 }
 
-function formatPrice(price) {
+function formatPrice(price, type) {
+  if (type === 'stock') {
+    return price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+  if (type === 'forex') {
+    return price >= 10 ? price.toFixed(3) : price.toFixed(5);
+  }
+  // Crypto: precision based on price magnitude
   if (price >= 1000) return price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   if (price >= 1) return price.toFixed(4);
   if (price >= 0.01) return price.toFixed(6);
@@ -2099,6 +2107,13 @@ async function loadChart(symbol, type, range) {
   const container = document.getElementById('tv-chart-container');
   if (!tvChart) initChart();
 
+  // Set price precision based on instrument type
+  let pricePrec = 2;
+  if (type === 'forex') pricePrec = 5;
+  else if (type === 'stock') pricePrec = 2;
+  else pricePrec = 2; // crypto default, auto-adjusts after data loads
+  tvCandleSeries.applyOptions({ priceFormat: { type: 'price', precision: pricePrec, minMove: 1 / Math.pow(10, pricePrec) } });
+
   tvCandleSeries.setData([]);
   tvVolumeSeries.setData([]);
 
@@ -2115,6 +2130,15 @@ async function loadChart(symbol, type, range) {
     return;
   }
 
+  // Auto-adjust crypto precision based on actual price
+  if (type === 'crypto' && data.price != null) {
+    let cp = 2;
+    if (data.price < 0.01) cp = 8;
+    else if (data.price < 1) cp = 6;
+    else if (data.price < 1000) cp = 4;
+    tvCandleSeries.applyOptions({ priceFormat: { type: 'price', precision: cp, minMove: 1 / Math.pow(10, cp) } });
+  }
+
   tvCandleSeries.setData(data.candles);
   tvVolumeSeries.setData(data.volumes);
   tvChart.timeScale().fitContent();
@@ -2123,13 +2147,13 @@ async function loadChart(symbol, type, range) {
   const price = data.price;
   const prevClose = data.prevClose;
   if (price != null) {
-    document.getElementById('chart-info-price').textContent = formatPrice(price);
+    document.getElementById('chart-info-price').textContent = formatPrice(price, type);
     if (prevClose) {
       const change = price - prevClose;
       const changePct = (change / prevClose) * 100;
       const sign = change >= 0 ? '+' : '';
       const el = document.getElementById('chart-info-change');
-      el.textContent = `${sign}${formatPrice(change)} (${sign}${changePct.toFixed(2)}%)`;
+      el.textContent = `${sign}${formatPrice(change, type)} (${sign}${changePct.toFixed(2)}%)`;
       el.className = `chart-info-change ${change >= 0 ? 'positive' : 'negative'}`;
     }
   }
@@ -2137,10 +2161,10 @@ async function loadChart(symbol, type, range) {
   // Update details grid
   const grid = document.getElementById('chart-details-grid');
   grid.style.display = 'grid';
-  document.getElementById('chart-detail-open').textContent = data.open != null ? formatPrice(data.open) : '--';
-  document.getElementById('chart-detail-high').textContent = data.high != null ? formatPrice(data.high) : '--';
-  document.getElementById('chart-detail-low').textContent = data.low != null ? formatPrice(data.low) : '--';
-  document.getElementById('chart-detail-close').textContent = data.close != null ? formatPrice(data.close) : '--';
+  document.getElementById('chart-detail-open').textContent = data.open != null ? formatPrice(data.open, type) : '--';
+  document.getElementById('chart-detail-high').textContent = data.high != null ? formatPrice(data.high, type) : '--';
+  document.getElementById('chart-detail-low').textContent = data.low != null ? formatPrice(data.low, type) : '--';
+  document.getElementById('chart-detail-close').textContent = data.close != null ? formatPrice(data.close, type) : '--';
   document.getElementById('chart-detail-volume').textContent = data.volume != null ? formatVolume(data.volume) : '--';
   if (data.price != null && data.prevClose) {
     const ch = data.price - data.prevClose;
@@ -2174,14 +2198,15 @@ function stopChartRealtime() {
 
 function updateChartInfoBar(price, prevClose) {
   if (price == null) return;
-  document.getElementById('chart-info-price').textContent = formatPrice(price);
-  document.getElementById('chart-detail-close').textContent = formatPrice(price);
+  const t = currentChartType;
+  document.getElementById('chart-info-price').textContent = formatPrice(price, t);
+  document.getElementById('chart-detail-close').textContent = formatPrice(price, t);
   if (prevClose) {
     const change = price - prevClose;
     const changePct = (change / prevClose) * 100;
     const sign = change >= 0 ? '+' : '';
     const el = document.getElementById('chart-info-change');
-    el.textContent = `${sign}${formatPrice(change)} (${sign}${changePct.toFixed(2)}%)`;
+    el.textContent = `${sign}${formatPrice(change, t)} (${sign}${changePct.toFixed(2)}%)`;
     el.className = `chart-info-change ${change >= 0 ? 'positive' : 'negative'}`;
     const chEl = document.getElementById('chart-detail-change');
     chEl.textContent = `${sign}${changePct.toFixed(2)}%`;
@@ -2220,9 +2245,9 @@ function startCryptoWebSocket(symbol, range) {
 
     // Update info bar and details
     updateChartInfoBar(candle.close, null);
-    document.getElementById('chart-detail-open').textContent = formatPrice(candle.open);
-    document.getElementById('chart-detail-high').textContent = formatPrice(candle.high);
-    document.getElementById('chart-detail-low').textContent = formatPrice(candle.low);
+    document.getElementById('chart-detail-open').textContent = formatPrice(candle.open, 'crypto');
+    document.getElementById('chart-detail-high').textContent = formatPrice(candle.high, 'crypto');
+    document.getElementById('chart-detail-low').textContent = formatPrice(candle.low, 'crypto');
     document.getElementById('chart-detail-volume').textContent = formatVolume(parseFloat(k.v));
   };
 
