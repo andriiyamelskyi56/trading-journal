@@ -278,9 +278,27 @@ a { color: var(--accent); text-decoration: none; }
 }
 
 /* ==================== DASHBOARD CHARTS ==================== */
+.summary-cards-secondary .card {
+  border-left: none;
+  border-top: 3px solid var(--border);
+}
+
+.summary-cards-secondary .card .card-value {
+  font-size: 22px;
+}
+
+.dashboard-equity-box {
+  margin-bottom: 24px;
+}
+
+.equity-chart-container {
+  width: 100%;
+  height: 220px;
+}
+
 .dashboard-charts {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, 1fr);
   gap: 24px;
   margin-bottom: 32px;
 }
@@ -1068,6 +1086,7 @@ a { color: var(--accent); text-decoration: none; }
 
   /* Charts */
   .dashboard-charts { grid-template-columns: 1fr; gap: 12px; margin-bottom: 16px; }
+  .equity-chart-container { height: 160px; }
   .chart-box { padding: 14px; }
 
   /* Table: horizontal scroll */

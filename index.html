@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Trading Journal</title>
-  <link rel="stylesheet" href="css/styles.css?v=24">
+  <link rel="stylesheet" href="css/styles.css?v=25">
 </head>
 <body>
   <!-- PANTALLA DE AUTH -->
@@ -170,6 +170,8 @@
       <!-- DASHBOARD -->
       <section id="dashboard" class="section active">
         <h2>Dashboard</h2>
+
+        <!-- Fila 1: métricas principales -->
         <div class="summary-cards">
           <div class="card card-total">
             <span class="card-label">Total Operaciones</span>
@@ -192,16 +194,57 @@
             <span class="card-value" id="total-pnl">$0.00</span>
           </div>
         </div>
+
+        <!-- Fila 2: métricas avanzadas -->
+        <div class="summary-cards summary-cards-secondary">
+          <div class="card">
+            <span class="card-label">Profit Factor</span>
+            <span class="card-value" id="profit-factor">--</span>
+          </div>
+          <div class="card">
+            <span class="card-label">Promedio Ganancia</span>
+            <span class="card-value positive" id="avg-win">$0.00</span>
+          </div>
+          <div class="card">
+            <span class="card-label">Promedio Pérdida</span>
+            <span class="card-value negative" id="avg-loss">$0.00</span>
+          </div>
+          <div class="card">
+            <span class="card-label">Mejor Trade</span>
+            <span class="card-value positive" id="best-trade">$0.00</span>
+          </div>
+          <div class="card">
+            <span class="card-label">Peor Trade</span>
+            <span class="card-value negative" id="worst-trade">$0.00</span>
+          </div>
+          <div class="card">
+            <span class="card-label">Racha Máx. Ganadora</span>
+            <span class="card-value" id="max-streak">0</span>
+          </div>
+        </div>
+
+        <!-- Equity Curve -->
+        <div class="chart-box dashboard-equity-box">
+          <h3>Curva de Equity</h3>
+          <div id="equity-chart-container" class="equity-chart-container"></div>
+        </div>
+
+        <!-- Gráficos bar -->
         <div class="dashboard-charts">
+          <div class="chart-box">
+            <h3>P&L Mensual</h3>
+            <div id="monthly-chart" class="bar-chart"></div>
+          </div>
           <div class="chart-box">
             <h3>Rentabilidad por Activo</h3>
             <div id="asset-chart" class="bar-chart"></div>
           </div>
           <div class="chart-box">
-            <h3>Rendimiento por Día de la Semana</h3>
+            <h3>Rendimiento por Día</h3>
             <div id="weekday-chart" class="bar-chart"></div>
           </div>
         </div>
+
         <div class="dashboard-recent">
           <h3>Últimas Operaciones</h3>
           <table class="trades-table">
@@ -597,7 +640,7 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
-  <script src="js/firebase-config.js?v=24"></script>
-  <script src="js/app.js?v=24"></script>
+  <script src="js/firebase-config.js?v=25"></script>
+  <script src="js/app.js?v=25"></script>
 </body>
 </html>

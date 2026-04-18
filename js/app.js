@@ -974,19 +974,46 @@ document.getElementById('filter-result').addEventListener('change', renderTrades
 // ==================== DASHBOARD ====================
 function renderDashboard() {
   const trades = getTrades();
+  const sorted = [...trades].sort((a, b) => new Date(a.date) - new Date(b.date));
   const wins = trades.filter(t => t.result === 'win');
   const losses = trades.filter(t => t.result === 'loss');
   const totalPnl = trades.reduce((sum, t) => sum + t.pnl, 0);
 
+  // Fila 1
   document.getElementById('total-trades').textContent = trades.length;
   document.getElementById('win-trades').textContent = wins.length;
   document.getElementById('loss-trades').textContent = losses.length;
   document.getElementById('win-rate').textContent = trades.length ? Math.round((wins.length / trades.length) * 100) + '%' : '0%';
-
   const pnlEl = document.getElementById('total-pnl');
   pnlEl.textContent = (totalPnl >= 0 ? '+' : '') + '$' + totalPnl.toFixed(2);
   pnlEl.className = 'card-value ' + (totalPnl >= 0 ? 'positive' : 'negative');
 
+  // Fila 2: métricas avanzadas
+  const grossWin = wins.reduce((s, t) => s + t.pnl, 0);
+  const grossLoss = Math.abs(losses.reduce((s, t) => s + t.pnl, 0));
+  const pf = grossLoss > 0 ? (grossWin / grossLoss).toFixed(2) : wins.length > 0 ? '∞' : '--';
+  document.getElementById('profit-factor').textContent = pf;
+  document.getElementById('profit-factor').className = 'card-value ' + (parseFloat(pf) >= 1 ? 'positive' : 'negative');
+
+  const avgWin = wins.length ? grossWin / wins.length : 0;
+  const avgLoss = losses.length ? grossLoss / losses.length : 0;
+  document.getElementById('avg-win').textContent = '$' + avgWin.toFixed(2);
+  document.getElementById('avg-loss').textContent = '-$' + avgLoss.toFixed(2);
+
+  const bestTrade = trades.length ? Math.max(...trades.map(t => t.pnl)) : 0;
+  const worstTrade = trades.length ? Math.min(...trades.map(t => t.pnl)) : 0;
+  document.getElementById('best-trade').textContent = '+$' + bestTrade.toFixed(2);
+  document.getElementById('worst-trade').textContent = '$' + worstTrade.toFixed(2);
+
+  // Racha máxima ganadora
+  let maxStreak = 0, curStreak = 0;
+  sorted.forEach(t => {
+    if (t.result === 'win') { curStreak++; maxStreak = Math.max(maxStreak, curStreak); }
+    else curStreak = 0;
+  });
+  document.getElementById('max-streak').textContent = maxStreak;
+
+  // Recent trades
   const recent = [...trades].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 5);
   document.getElementById('recent-trades-body').innerHTML = recent.map(t => `
     <tr class="trade-row-${t.result}">
@@ -998,11 +1025,91 @@ function renderDashboard() {
     </tr>
   `).join('');
 
+  renderEquityChart(sorted);
+  renderMonthlyChart(sorted);
   renderAssetChart(trades);
   renderWeekdayChart(trades);
 }
 
+// ==================== EQUITY CURVE ====================
+let equityChart = null;
+let equitySeries = null;
+
+function renderEquityChart(sortedTrades) {
+  const container = document.getElementById('equity-chart-container');
+
+  if (!equityChart) {
+    equityChart = LightweightCharts.createChart(container, {
+      width: container.clientWidth,
+      height: 220,
+      layout: { background: { color: '#1a1d27' }, textColor: '#8a8fa8' },
+      grid: { vertLines: { color: '#2a2e3d' }, horzLines: { color: '#2a2e3d' } },
+      rightPriceScale: { borderColor: '#2a2e3d' },
+      timeScale: { borderColor: '#2a2e3d', timeVisible: false },
+      crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+      handleScroll: false,
+      handleScale: false,
+    });
+    equitySeries = equityChart.addAreaSeries({
+      lineColor: '#6366f1',
+      topColor: '#6366f130',
+      bottomColor: '#6366f100',
+      lineWidth: 2,
+      priceFormat: { type: 'price', precision: 2, minMove: 0.01 },
+    });
+    const resizeObs = new ResizeObserver(() => equityChart.applyOptions({ width: container.clientWidth }));
+    resizeObs.observe(container);
+  }
+
+  if (sortedTrades.length === 0) {
+    equitySeries.setData([]);
+    return;
+  }
+
+  let cumulative = 0;
+  const data = [];
+  const seen = new Set();
+  sortedTrades.forEach((t, i) => {
+    cumulative += t.pnl;
+    let time = t.date; // 'YYYY-MM-DD'
+    // Ensure unique timestamps by appending index offset if duplicate
+    if (seen.has(time)) {
+      // Use epoch seconds with offset
+      const base = Math.floor(new Date(time + 'T12:00:00').getTime() / 1000);
+      time = base + i;
+    } else {
+      seen.add(time);
+      time = Math.floor(new Date(time + 'T12:00:00').getTime() / 1000);
+    }
+    data.push({ time, value: parseFloat(cumulative.toFixed(2)) });
+  });
+
+  equitySeries.setData(data);
+  equityChart.timeScale().fitContent();
+}
+
 // ==================== BAR CHARTS ====================
+function renderMonthlyChart(sortedTrades) {
+  const container = document.getElementById('monthly-chart');
+  const monthlyPnl = {};
+  sortedTrades.forEach(t => {
+    const key = t.date.slice(0, 7); // 'YYYY-MM'
+    monthlyPnl[key] = (monthlyPnl[key] || 0) + t.pnl;
+  });
+
+  const entries = Object.entries(monthlyPnl).sort((a, b) => a[0].localeCompare(b[0]));
+  if (entries.length === 0) { container.innerHTML = '<p class="empty-msg">No hay datos aun</p>'; return; }
+
+  const maxAbs = Math.max(...entries.map(e => Math.abs(e[1])), 1);
+  container.innerHTML = entries.map(([month, pnl]) => {
+    const [y, m] = month.split('-');
+    const label = new Date(+y, +m - 1, 1).toLocaleString('es-ES', { month: 'short', year: '2-digit' });
+    const width = Math.round((Math.abs(pnl) / maxAbs) * 100);
+    const cls = pnl >= 0 ? 'bar-positive' : 'bar-negative';
+    return `<div class="bar-row"><span class="bar-label">${label}</span><div class="bar-track"><div class="bar-fill ${cls}" style="width:${Math.max(width, 3)}%"></div></div><span class="bar-value ${pnl >= 0 ? 'positive' : 'negative'}">${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}</span></div>`;
+  }).join('');
+}
+
 function renderAssetChart(trades) {
   const container = document.getElementById('asset-chart');
   const assetPnl = {};
