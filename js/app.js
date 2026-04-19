@@ -1247,6 +1247,7 @@ function renderWeekdayChart(trades) {
   const openPos = getOpenPositions();
   openPos.forEach(pos => {
     const history = openHistoricalCache[pos.id];
+    console.log(`[WeekdayChart] ${pos.asset} history:`, history?.length || 0, 'points');
     if (!history || history.length === 0) return;
     const qty = parseFloat(pos.quantity) || 1;
     const dir = (pos.direction === 'long' || pos.direction === 'buy') ? 1 : -1;
@@ -1258,6 +1259,7 @@ function renderWeekdayChart(trades) {
       prevClose = close;
     });
   });
+  console.log('[WeekdayChart] dayPnl:', JSON.stringify(dayPnl));
 
   const maxAbs = Math.max(...dayPnl.map(v => Math.abs(v)), 1);
   container.innerHTML = days.map((name, i) => {
@@ -2807,12 +2809,13 @@ async function renderOpenPnlCurves(results) {
     // Fetch historical and render
     const points = await fetchHistoricalPrices(pos);
 
-    // Store in cache for equity curve (convert epoch to YYYY-MM-DD)
+    // Store in cache for equity curve (convert epoch to YYYY-MM-DD local time)
     openHistoricalCache[pos.id] = points.map(p => {
       const d = new Date(p.time * 1000);
-      const date = d.toISOString().split('T')[0];
+      const date = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
       return { date, close: p.close };
     });
+    console.log(`[HistCache] ${pos.asset} (${pos.id}): ${points.length} points`, openHistoricalCache[pos.id]);
 
     // Re-render equity curve with updated historical data
     renderDashboard();
