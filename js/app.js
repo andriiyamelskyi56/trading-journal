@@ -1,6 +1,7 @@
 // ==================== STATE ====================
 let currentUser = null;
 let tradesCache = [];
+let openPnlCache = {}; // { tradeId: { pnl, currentPrice } }
 let currentMonth = new Date().getMonth();
 let currentYear = new Date().getFullYear();
 let editingTradeId = null;
@@ -359,8 +360,8 @@ function getTrades() {
     } else if (trade.result === 'win') {
       if (typeof trade.pnl !== 'number') trade.pnl = 0;
     } else if (trade.result === 'open') {
-      // Open positions: exclude from closed P&L stats; pnl = 0 for stats
-      trade.pnl = 0;
+      const cached = openPnlCache[trade.id];
+      trade.pnl = cached ? cached.pnl : 0;
     }
     if (typeof trade.pnl !== 'number') trade.pnl = 0;
     return trade;
@@ -1621,7 +1622,7 @@ function formatDate(dateStr) {
 }
 
 function resultLabel(result) {
-  return { win: 'Ganadora', loss: 'Perdedora', breakeven: 'Breakeven' }[result] || result;
+  return { win: 'Ganadora', loss: 'Perdedora', breakeven: 'Breakeven', open: 'Abierta' }[result] || result;
 }
 
 function escapeHtml(text) {
@@ -2595,8 +2596,15 @@ async function renderOpenPositions() {
         : (entry - currentPrice) * qty;
       pctChange = ((currentPrice - entry) / entry) * 100 * (dir === 'long' ? 1 : -1);
     }
+    // Update cache for dashboard stats
+    if (unrealPnl != null) {
+      openPnlCache[pos.id] = { pnl: unrealPnl, currentPrice };
+    }
     return { pos, currentPrice, unrealPnl, pctChange };
   }));
+
+  // Re-render dashboard stats with updated P&L from open positions
+  renderDashboard();
 
   tbody.innerHTML = results.map(({ pos, currentPrice, unrealPnl, pctChange }) => {
     const t = pos.marketType || 'stock';
