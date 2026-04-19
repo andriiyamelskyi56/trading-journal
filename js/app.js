@@ -1182,9 +1182,25 @@ function renderEquityChart(sortedTrades) {
 function renderMonthlyChart(sortedTrades) {
   const container = document.getElementById('monthly-chart');
   const monthlyPnl = {};
-  sortedTrades.forEach(t => {
-    const key = t.date.slice(0, 7); // 'YYYY-MM'
+  sortedTrades.filter(t => t.result !== 'open').forEach(t => {
+    const key = t.date.slice(0, 7);
     monthlyPnl[key] = (monthlyPnl[key] || 0) + t.pnl;
+  });
+
+  // P&L diario de posiciones abiertas agrupado por mes
+  const openPos = getOpenPositions();
+  openPos.forEach(pos => {
+    const history = openHistoricalCache[pos.id];
+    if (!history || history.length === 0) return;
+    const qty = parseFloat(pos.quantity) || 1;
+    const dir = (pos.direction === 'long' || pos.direction === 'buy') ? 1 : -1;
+    let prevClose = parseFloat(pos.entry) || 0;
+    history.forEach(({ date, close }) => {
+      const key = date.slice(0, 7);
+      const dailyChange = (close - prevClose) * qty * dir;
+      monthlyPnl[key] = (monthlyPnl[key] || 0) + dailyChange;
+      prevClose = close;
+    });
   });
 
   const entries = Object.entries(monthlyPnl).sort((a, b) => a[0].localeCompare(b[0]));
@@ -1194,9 +1210,9 @@ function renderMonthlyChart(sortedTrades) {
   container.innerHTML = entries.map(([month, pnl]) => {
     const [y, m] = month.split('-');
     const label = new Date(+y, +m - 1, 1).toLocaleString('es-ES', { month: 'short', year: '2-digit' });
-    const width = Math.round((Math.abs(pnl) / maxAbs) * 100);
+    const width = pnl === 0 ? 0 : Math.max(Math.round((Math.abs(pnl) / maxAbs) * 100), 3);
     const cls = pnl >= 0 ? 'bar-positive' : 'bar-negative';
-    return `<div class="bar-row"><span class="bar-label">${label}</span><div class="bar-track"><div class="bar-fill ${cls}" style="width:${Math.max(width, 3)}%"></div></div><span class="bar-value ${pnl >= 0 ? 'positive' : 'negative'}">${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}</span></div>`;
+    return `<div class="bar-row"><span class="bar-label">${label}</span><div class="bar-track"><div class="bar-fill ${cls}" style="width:${width}%"></div></div><span class="bar-value ${pnl >= 0 ? 'positive' : 'negative'}">${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}</span></div>`;
   }).join('');
 }
 
@@ -1220,7 +1236,28 @@ function renderWeekdayChart(trades) {
   const container = document.getElementById('weekday-chart');
   const days = ['Domingo', 'Lunes', 'Martes', 'Miercoles', 'Jueves', 'Viernes', 'Sabado'];
   const dayPnl = [0, 0, 0, 0, 0, 0, 0];
-  trades.forEach(t => { const d = new Date(t.date + 'T12:00:00').getDay(); dayPnl[d] += t.pnl; });
+
+  // P&L de trades cerrados por día de la semana
+  trades.filter(t => t.result !== 'open').forEach(t => {
+    const d = new Date(t.date + 'T12:00:00').getDay();
+    dayPnl[d] += t.pnl;
+  });
+
+  // P&L diario de posiciones abiertas: (cierre_hoy - cierre_ayer) × lote × dirección
+  const openPos = getOpenPositions();
+  openPos.forEach(pos => {
+    const history = openHistoricalCache[pos.id];
+    if (!history || history.length === 0) return;
+    const qty = parseFloat(pos.quantity) || 1;
+    const dir = (pos.direction === 'long' || pos.direction === 'buy') ? 1 : -1;
+    let prevClose = parseFloat(pos.entry) || 0;
+    history.forEach(({ date, close }) => {
+      const dailyChange = (close - prevClose) * qty * dir;
+      const dow = new Date(date + 'T12:00:00').getDay();
+      dayPnl[dow] += dailyChange;
+      prevClose = close;
+    });
+  });
 
   const maxAbs = Math.max(...dayPnl.map(v => Math.abs(v)), 1);
   container.innerHTML = days.map((name, i) => {
