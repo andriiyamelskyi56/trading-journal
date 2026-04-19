@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Trading Journal</title>
-  <link rel="stylesheet" href="css/styles.css?v=26">
+  <link rel="stylesheet" href="css/styles.css?v=27">
 </head>
 <body>
   <!-- PANTALLA DE AUTH -->
@@ -236,6 +236,32 @@
           <div class="card">
             <span class="card-label">R:R Promedio</span>
             <span class="card-value" id="avg-rr">--</span>
+          </div>
+        </div>
+
+        <!-- Posiciones Abiertas -->
+        <div class="open-positions-section" id="open-positions-section" style="display:none;">
+          <div class="section-header" style="margin-bottom:12px;">
+            <h3 style="font-size:16px;font-weight:700;">Posiciones Abiertas</h3>
+            <button class="btn btn-sm" id="refresh-open-btn">&#8635; Actualizar precios</button>
+          </div>
+          <div class="open-positions-table-wrap">
+            <table class="trades-table">
+              <thead>
+                <tr>
+                  <th>Activo</th>
+                  <th>Dir.</th>
+                  <th>Lotes</th>
+                  <th>Entrada</th>
+                  <th>Precio actual</th>
+                  <th>P&L No Realizado</th>
+                  <th>% Cambio</th>
+                  <th>Desde</th>
+                  <th>Gráfico</th>
+                </tr>
+              </thead>
+              <tbody id="open-positions-body"></tbody>
+            </table>
           </div>
         </div>
 
@@ -626,11 +652,27 @@
                 <option value="win">Ganadora</option>
                 <option value="loss">Perdedora</option>
                 <option value="breakeven">Breakeven</option>
+                <option value="open">Posición Abierta</option>
               </select>
             </div>
             <div class="form-group">
               <label>P&L vs Plan</label>
               <div class="rr-actual" id="trade-rr-actual">--</div>
+            </div>
+          </div>
+          <!-- Ticker de mercado (solo para posiciones abiertas) -->
+          <div class="form-row" id="open-position-fields" style="display:none;">
+            <div class="form-group">
+              <label for="trade-market-symbol">Ticker de Mercado</label>
+              <input type="text" id="trade-market-symbol" placeholder="AAPL, BTCUSDT, EURUSD..." autocomplete="off">
+            </div>
+            <div class="form-group">
+              <label for="trade-market-type">Tipo de Mercado</label>
+              <select id="trade-market-type">
+                <option value="stock">Acción</option>
+                <option value="crypto">Crypto</option>
+                <option value="forex">Forex</option>
+              </select>
             </div>
           </div>
           <div class="form-group full-width">
@@ -668,7 +710,7 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
-  <script src="js/firebase-config.js?v=26"></script>
-  <script src="js/app.js?v=26"></script>
+  <script src="js/firebase-config.js?v=27"></script>
+  <script src="js/app.js?v=27"></script>
 </body>
 </html>

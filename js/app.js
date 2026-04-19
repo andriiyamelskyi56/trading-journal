@@ -351,19 +351,24 @@ function subscribeTrades() {
 
 function getTrades() {
   return tradesCache.map(t => {
-    // Recalculate P&L based on result for display
     const trade = { ...t };
     if (trade.result === 'loss' && trade.risk > 0) {
       trade.pnl = -trade.risk;
     } else if (trade.result === 'breakeven') {
       trade.pnl = 0;
     } else if (trade.result === 'win') {
-      // Keep saved P&L for wins (from exit or TP)
       if (typeof trade.pnl !== 'number') trade.pnl = 0;
+    } else if (trade.result === 'open') {
+      // Open positions: exclude from closed P&L stats; pnl = 0 for stats
+      trade.pnl = 0;
     }
     if (typeof trade.pnl !== 'number') trade.pnl = 0;
     return trade;
   });
+}
+
+function getOpenPositions() {
+  return tradesCache.filter(t => t.result === 'open');
 }
 
 async function saveTrade(trade) {
@@ -506,6 +511,13 @@ function calcRRActual() {
 }
 
 document.getElementById('trade-exit').addEventListener('input', calcRRActual);
+
+// Show/hide open position fields based on result selection
+document.getElementById('trade-result').addEventListener('change', (e) => {
+  const isOpen = e.target.value === 'open';
+  document.getElementById('open-position-fields').style.display = isOpen ? '' : 'none';
+  document.getElementById('trade-exit').closest('.form-row').style.display = isOpen ? 'none' : '';
+});
 
 // ==================== CLOUDINARY CONFIG ====================
 const CLOUDINARY_CLOUD = 'dr1nxeniz';
@@ -707,6 +719,8 @@ function openModal(trade = null) {
   document.getElementById('trade-rr-actual').style.color = '';
   document.getElementById('modal-title').textContent = 'Nueva Operacion';
   document.getElementById('trade-date').value = new Date().toISOString().split('T')[0];
+  document.getElementById('open-position-fields').style.display = 'none';
+  document.getElementById('trade-exit').closest('.form-row').style.display = '';
   switchToTab('plan');
 
   if (trade) {
@@ -725,6 +739,14 @@ function openModal(trade = null) {
     document.getElementById('trade-tp').value = trade.tp || '';
     document.getElementById('trade-notes-pre').value = trade.notesPre || trade.notes || '';
     document.getElementById('trade-notes-post').value = trade.notesPost || '';
+
+    // Open position fields
+    if (trade.result === 'open') {
+      document.getElementById('open-position-fields').style.display = '';
+      document.getElementById('trade-exit').closest('.form-row').style.display = 'none';
+      document.getElementById('trade-market-symbol').value = trade.marketSymbol || '';
+      document.getElementById('trade-market-type').value = trade.marketType || 'stock';
+    }
 
     existingScreensPre = [...(trade.screenshotsPre || [])];
     existingScreensPost = [...(trade.screenshotsPost || [])];
@@ -799,8 +821,15 @@ form.addEventListener('submit', async (e) => {
     // Result is always set by the user
     trade.result = document.getElementById('trade-result').value || 'breakeven';
 
+    // Save open position extra fields
+    if (trade.result === 'open') {
+      trade.marketSymbol = document.getElementById('trade-market-symbol').value.toUpperCase().trim() || trade.asset;
+      trade.marketType = document.getElementById('trade-market-type').value || 'stock';
+      trade.pnl = 0;
+    }
+
     // Calculate P&L — resultado determines the P&L logic
-    if (pnlVal) {
+    if (trade.result !== 'open' && pnlVal) {
       // Manual P&L entered by user
       trade.pnl = parseFloat(pnlVal);
     } else if (trade.result === 'loss') {
@@ -2523,11 +2552,103 @@ document.getElementById('chart-range-btns').addEventListener('click', (e) => {
   }
 });
 
+// ==================== OPEN POSITIONS ====================
+async function fetchPriceForPosition(pos) {
+  const symbol = pos.marketSymbol || pos.asset;
+  const type = pos.marketType || 'stock';
+  try {
+    if (type === 'crypto') {
+      const res = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${encodeURIComponent(symbol)}`);
+      if (res.ok) { const d = await res.json(); return parseFloat(d.price); }
+    } else {
+      // Try Finnhub
+      const key = localStorage.getItem('finnhub_api_key') || 'demo';
+      const res = await fetch(`https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(symbol)}&token=${key}`);
+      if (res.ok) { const d = await res.json(); if (d.c > 0) return d.c; }
+      // Fallback: Yahoo Finance
+      const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1d`;
+      const res2 = await fetch(`https://corsproxy.io/?${yahooUrl}`);
+      if (res2.ok) { const d2 = await res2.json(); const p = d2?.chart?.result?.[0]?.meta?.regularMarketPrice; if (p) return p; }
+    }
+  } catch (e) { /* silent */ }
+  return null;
+}
+
+async function renderOpenPositions() {
+  const positions = getOpenPositions();
+  const section = document.getElementById('open-positions-section');
+  if (positions.length === 0) { section.style.display = 'none'; return; }
+  section.style.display = '';
+
+  const tbody = document.getElementById('open-positions-body');
+  tbody.innerHTML = positions.map(() => `<tr><td colspan="9" class="quote-loading">Cargando precios...</td></tr>`).join('');
+
+  const results = await Promise.all(positions.map(async (pos) => {
+    const currentPrice = await fetchPriceForPosition(pos);
+    const entry = pos.entry;
+    const qty = pos.quantity || 1;
+    const dir = pos.direction || 'long';
+    let unrealPnl = null, pctChange = null;
+    if (currentPrice != null && entry) {
+      unrealPnl = dir === 'long'
+        ? (currentPrice - entry) * qty
+        : (entry - currentPrice) * qty;
+      pctChange = ((currentPrice - entry) / entry) * 100 * (dir === 'long' ? 1 : -1);
+    }
+    return { pos, currentPrice, unrealPnl, pctChange };
+  }));
+
+  tbody.innerHTML = results.map(({ pos, currentPrice, unrealPnl, pctChange }) => {
+    const t = pos.marketType || 'stock';
+    const priceStr = currentPrice != null ? formatPrice(currentPrice, t) : '--';
+    const entryStr = formatPrice(pos.entry, t);
+    const pnlStr = unrealPnl != null ? (unrealPnl >= 0 ? '+' : '') + '$' + unrealPnl.toFixed(2) : '--';
+    const pnlCls = unrealPnl != null ? (unrealPnl >= 0 ? 'positive' : 'negative') : '';
+    const pctStr = pctChange != null ? (pctChange >= 0 ? '+' : '') + pctChange.toFixed(2) + '%' : '--';
+    const symbol = pos.marketSymbol || pos.asset;
+    return `<tr>
+      <td><strong>${escapeHtml(pos.asset)}</strong> <span class="badge" style="font-size:9px">${(t).toUpperCase()}</span></td>
+      <td><span class="badge badge-${pos.direction}">${(pos.direction || '').toUpperCase()}</span></td>
+      <td>${pos.quantity}</td>
+      <td>${entryStr}</td>
+      <td class="${currentPrice != null ? (currentPrice >= pos.entry ? 'positive' : 'negative') : ''}">${priceStr}</td>
+      <td class="${pnlCls}" style="font-weight:700;">${pnlStr}</td>
+      <td class="${pnlCls}">${pctStr}</td>
+      <td>${formatDate(pos.date)}</td>
+      <td><button class="btn btn-sm" data-open-chart="${symbol}" data-open-type="${t}">&#128200;</button></td>
+    </tr>`;
+  }).join('');
+
+  // Chart buttons
+  tbody.querySelectorAll('[data-open-chart]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const symbol = btn.dataset.openChart;
+      const type = btn.dataset.openType;
+      // Navigate to charts section and load the position P&L chart
+      document.querySelectorAll('.nav-links a').forEach(l => l.classList.remove('active'));
+      document.querySelector('[data-section="charts"]').classList.add('active');
+      document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+      document.getElementById('charts').classList.add('active');
+      populateChartSymbols();
+      // Find the option and load
+      setTimeout(() => {
+        const sel = document.getElementById('chart-symbol-select');
+        const opt = Array.from(sel.options).find(o => o.value === symbol);
+        if (opt) { sel.value = symbol; loadChart(symbol, type, currentChartRange); }
+        else { loadChart(symbol, type, currentChartRange); }
+      }, 100);
+    });
+  });
+}
+
+document.getElementById('refresh-open-btn').addEventListener('click', renderOpenPositions);
+
 function refreshAll() {
   renderDashboard();
   renderCalendar();
   renderTradesTable();
   renderStats();
+  renderOpenPositions();
   if (document.getElementById('markets').classList.contains('active') && activeWatchlistId) {
     fetchQuotes();
   }

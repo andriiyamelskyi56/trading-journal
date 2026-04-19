@@ -358,6 +358,19 @@ a { color: var(--accent); text-decoration: none; }
   flex-shrink: 0;
 }
 
+/* ==================== OPEN POSITIONS ==================== */
+.open-positions-section {
+  background: var(--bg-card);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  padding: 20px;
+  margin-bottom: 24px;
+}
+
+.open-positions-table-wrap {
+  overflow-x: auto;
+}
+
 /* ==================== DIRECTION CHART ==================== */
 .direction-comparison {
   display: flex;
