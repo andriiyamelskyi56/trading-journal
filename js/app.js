@@ -1980,42 +1980,10 @@ async function fetchQuotes() {
     }
   }
 
-  // Fetch stock/forex quotes via Finnhub API (free, CORS-enabled)
+  // Fetch stock/forex quotes via Yahoo Finance
   if (otherInstruments.length > 0) {
-    const FINNHUB_KEY = localStorage.getItem('finnhub_api_key') || 'demo';
-
     const stockQuotePromises = otherInstruments.map(async (inst) => {
-      try {
-        // Try Finnhub first (CORS-enabled, no proxy needed)
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 8000);
-        const res = await fetch(
-          `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(inst.symbol)}&token=${FINNHUB_KEY}`,
-          { signal: controller.signal }
-        );
-        clearTimeout(timeoutId);
-        if (res.ok) {
-          const q = await res.json();
-          // Finnhub returns: c=current, d=change, dp=change%, h=high, l=low, pc=prevClose, o=open
-          if (q && q.c && q.c > 0) {
-            return {
-              symbol: inst.symbol,
-              name: inst.name,
-              type: inst.type,
-              price: q.c,
-              change: q.d,
-              changePercent: q.dp,
-              high: q.h || null,
-              low: q.l || null,
-              volume: null, // Finnhub quote doesn't include volume
-            };
-          }
-        }
-      } catch (err) {
-        console.warn(`Finnhub error for ${inst.symbol}:`, err.message);
-      }
-
-      // Fallback: try Yahoo Finance via CORS proxy
+      // Try Yahoo Finance via CORS proxy
       try {
         const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(inst.symbol)}?interval=1d&range=1d`;
         const controller2 = new AbortController();
@@ -2634,11 +2602,7 @@ async function fetchPriceForPosition(pos) {
       const res = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${encodeURIComponent(symbol)}`);
       if (res.ok) { const d = await res.json(); return parseFloat(d.price); }
     } else {
-      // Try Finnhub
-      const key = localStorage.getItem('finnhub_api_key') || 'demo';
-      const res = await fetch(`https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(symbol)}&token=${key}`);
-      if (res.ok) { const d = await res.json(); if (d.c > 0) return d.c; }
-      // Fallback: Yahoo Finance
+      // Yahoo Finance via CORS proxy
       const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1d`;
       const res2 = await fetch(`https://corsproxy.io/?${yahooUrl}`);
       if (res2.ok) { const d2 = await res2.json(); const p = d2?.chart?.result?.[0]?.meta?.regularMarketPrice; if (p) return p; }
