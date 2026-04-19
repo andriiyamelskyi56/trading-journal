@@ -2624,13 +2624,11 @@ async function renderOpenPositions() {
     btn.addEventListener('click', () => {
       const symbol = btn.dataset.openChart;
       const type = btn.dataset.openType;
-      // Navigate to charts section and load the position P&L chart
       document.querySelectorAll('.nav-links a').forEach(l => l.classList.remove('active'));
       document.querySelector('[data-section="charts"]').classList.add('active');
       document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
       document.getElementById('charts').classList.add('active');
       populateChartSymbols();
-      // Find the option and load
       setTimeout(() => {
         const sel = document.getElementById('chart-symbol-select');
         const opt = Array.from(sel.options).find(o => o.value === symbol);
@@ -2639,6 +2637,139 @@ async function renderOpenPositions() {
       }, 100);
     });
   });
+
+  // Render P&L curves for each position
+  await renderOpenPnlCurves(results);
+}
+
+const openPnlCharts = {};
+
+async function fetchHistoricalPrices(pos) {
+  const symbol = pos.marketSymbol || pos.asset;
+  const type = pos.marketType || 'stock';
+  const entryDate = pos.date; // 'YYYY-MM-DD'
+
+  // Calculate days since entry
+  const daysSince = Math.ceil((new Date() - new Date(entryDate + 'T12:00:00')) / 86400000);
+  if (daysSince <= 0) return [];
+
+  let range = '1mo';
+  if (daysSince > 365) range = '5y';
+  else if (daysSince > 90) range = '1y';
+  else if (daysSince > 30) range = '6mo';
+
+  if (type === 'crypto') {
+    let interval = '1d', limit = Math.min(daysSince + 2, 365);
+    if (daysSince > 365) { interval = '1w'; limit = Math.min(Math.ceil(daysSince / 7) + 2, 200); }
+    try {
+      const res = await fetch(`https://api.binance.com/api/v3/klines?symbol=${encodeURIComponent(symbol)}&interval=${interval}&limit=${limit}`);
+      if (!res.ok) return [];
+      const data = await res.json();
+      return data
+        .filter(k => Math.floor(k[0] / 1000) >= Math.floor(new Date(entryDate + 'T00:00:00').getTime() / 1000))
+        .map(k => ({ time: Math.floor(k[0] / 1000), close: parseFloat(k[4]) }));
+    } catch { return []; }
+  }
+
+  // Stocks/Forex via Yahoo Finance
+  const proxies = [
+    url => `https://corsproxy.io/?${url}`,
+    url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+  ];
+  const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=${range}`;
+  for (const proxy of proxies) {
+    try {
+      const controller = new AbortController();
+      const tid = setTimeout(() => controller.abort(), 10000);
+      const res = await fetch(proxy(yahooUrl), { signal: controller.signal });
+      clearTimeout(tid);
+      if (!res.ok) continue;
+      const data = await res.json();
+      const result = data?.chart?.result?.[0];
+      if (!result) continue;
+      const timestamps = result.timestamp;
+      const closes = result.indicators?.quote?.[0]?.close;
+      if (!timestamps || !closes) continue;
+      const entryTs = Math.floor(new Date(entryDate + 'T00:00:00').getTime() / 1000);
+      const points = [];
+      for (let i = 0; i < timestamps.length; i++) {
+        if (timestamps[i] >= entryTs && closes[i] != null) {
+          points.push({ time: timestamps[i], close: closes[i] });
+        }
+      }
+      return points;
+    } catch { /* try next */ }
+  }
+  return [];
+}
+
+async function renderOpenPnlCurves(results) {
+  const container = document.getElementById('open-pnl-curves');
+  container.innerHTML = '';
+
+  for (const { pos, unrealPnl } of results) {
+    const symbol = pos.marketSymbol || pos.asset;
+    const type = pos.marketType || 'stock';
+    const entry = pos.entry;
+    const qty = pos.quantity || 1;
+    const dir = pos.direction === 'long' ? 1 : -1;
+
+    const box = document.createElement('div');
+    box.className = 'open-pnl-curve-box';
+    const pnlCls = unrealPnl != null ? (unrealPnl >= 0 ? 'positive' : 'negative') : '';
+    const pnlStr = unrealPnl != null ? (unrealPnl >= 0 ? '+' : '') + '$' + unrealPnl.toFixed(2) : '--';
+    box.innerHTML = `
+      <div class="open-pnl-curve-header">
+        <span class="open-pnl-curve-title">P&L — ${escapeHtml(pos.asset)} (desde ${formatDate(pos.date)})</span>
+        <span class="open-pnl-curve-value ${pnlCls}">${pnlStr}</span>
+      </div>
+      <div class="open-pnl-chart-container" id="pnl-curve-${escapeHtml(symbol)}"></div>`;
+    container.appendChild(box);
+
+    // Fetch historical and render
+    const points = await fetchHistoricalPrices(pos);
+    const chartEl = document.getElementById(`pnl-curve-${escapeHtml(symbol)}`);
+    if (!chartEl) continue;
+
+    const chart = LightweightCharts.createChart(chartEl, {
+      width: chartEl.clientWidth,
+      height: 160,
+      layout: { background: { color: '#0f1117' }, textColor: '#8a8fa8' },
+      grid: { vertLines: { color: '#2a2e3d' }, horzLines: { color: '#2a2e3d' } },
+      rightPriceScale: { borderColor: '#2a2e3d' },
+      timeScale: { borderColor: '#2a2e3d', timeVisible: false },
+      crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+      handleScroll: false, handleScale: false,
+    });
+
+    const pnlData = points.map(p => ({
+      time: p.time,
+      value: parseFloat(((p.close - entry) * qty * dir).toFixed(2)),
+    }));
+
+    const isPositive = pnlData.length === 0 || pnlData[pnlData.length - 1].value >= 0;
+    const lineColor = isPositive ? '#22c55e' : '#ef4444';
+    const topColor = isPositive ? '#22c55e30' : '#ef444430';
+
+    const series = chart.addAreaSeries({
+      lineColor,
+      topColor,
+      bottomColor: '#00000000',
+      lineWidth: 2,
+      priceFormat: { type: 'price', precision: 2, minMove: 0.01 },
+    });
+
+    if (pnlData.length > 0) {
+      series.setData(pnlData);
+      chart.timeScale().fitContent();
+    }
+
+    // Add zero baseline
+    series.createPriceLine({ price: 0, color: '#8a8fa840', lineWidth: 1, lineStyle: 2 });
+
+    const resizeObs = new ResizeObserver(() => chart.applyOptions({ width: chartEl.clientWidth }));
+    resizeObs.observe(chartEl);
+  }
 }
 
 document.getElementById('refresh-open-btn').addEventListener('click', renderOpenPositions);

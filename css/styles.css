@@ -371,6 +371,43 @@ a { color: var(--accent); text-decoration: none; }
   overflow-x: auto;
 }
 
+.open-pnl-curves {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.open-pnl-curve-box {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+
+.open-pnl-curve-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.open-pnl-curve-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.open-pnl-curve-value {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.open-pnl-chart-container {
+  width: 100%;
+  height: 160px;
+}
+
 /* ==================== DIRECTION CHART ==================== */
 .direction-comparison {
   display: flex;
