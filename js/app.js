@@ -2,6 +2,7 @@
 let currentUser = null;
 let tradesCache = [];
 let openPnlCache = {}; // { tradeId: { pnl, currentPrice } }
+let openHistoricalCache = {}; // { tradeId: [{date:'YYYY-MM-DD', close}] }
 let currentMonth = new Date().getMonth();
 let currentYear = new Date().getFullYear();
 let editingTradeId = null;
@@ -1129,11 +1130,27 @@ function renderEquityChart(sortedTrades) {
     return;
   }
 
-  // Agrupar P&L por fecha: suma todos los trades del mismo día
+  // Agrupar P&L por fecha de trades cerrados
   const dailyPnl = {};
   sortedTrades.forEach(t => {
+    if (t.result === 'open') return; // open positions handled via historical cache
     const day = t.date;
     dailyPnl[day] = (dailyPnl[day] || 0) + (t.pnl || 0);
+  });
+
+  // Añadir P&L incremental diario de posiciones abiertas usando cierres históricos
+  const openPos = getOpenPositions();
+  openPos.forEach(pos => {
+    const history = openHistoricalCache[pos.id];
+    if (!history || history.length === 0) return;
+    const qty = parseFloat(pos.quantity) || 1;
+    const dir = (pos.direction === 'long' || pos.direction === 'buy') ? 1 : -1;
+    let prevClose = parseFloat(pos.entry) || 0;
+    history.forEach(({ date, close }) => {
+      const dailyChange = (close - prevClose) * qty * dir;
+      dailyPnl[date] = (dailyPnl[date] || 0) + dailyChange;
+      prevClose = close;
+    });
   });
 
   // Ordenar por fecha y calcular acumulado
@@ -1143,17 +1160,10 @@ function renderEquityChart(sortedTrades) {
   sortedDays.forEach(day => {
     cumulative += dailyPnl[day];
     data.push({
-      time: day, // 'YYYY-MM-DD' — LightweightCharts acepta este formato directamente
+      time: day,
       value: parseFloat(cumulative.toFixed(2)),
     });
   });
-
-  // Añadir punto de hoy si la última fecha no es hoy y hay posiciones abiertas
-  const todayStr = new Date().toISOString().split('T')[0];
-  const hasOpen = sortedTrades.some(t => t.result === 'open');
-  if (hasOpen && data.length > 0 && data[data.length - 1].time !== todayStr) {
-    data.push({ time: todayStr, value: parseFloat(cumulative.toFixed(2)) });
-  }
 
   equitySeriesClosed.setData(data);
 
@@ -2756,6 +2766,17 @@ async function renderOpenPnlCurves(results) {
 
     // Fetch historical and render
     const points = await fetchHistoricalPrices(pos);
+
+    // Store in cache for equity curve (convert epoch to YYYY-MM-DD)
+    openHistoricalCache[pos.id] = points.map(p => {
+      const d = new Date(p.time * 1000);
+      const date = d.toISOString().split('T')[0];
+      return { date, close: p.close };
+    });
+
+    // Re-render equity curve with updated historical data
+    renderDashboard();
+
     const chartEl = document.getElementById(`pnl-curve-${escapeHtml(symbol)}`);
     if (!chartEl) continue;
 
