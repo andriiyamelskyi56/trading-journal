@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Trading Journal</title>
-  <link rel="stylesheet" href="css/styles.css?v=25">
+  <link rel="stylesheet" href="css/styles.css?v=26">
 </head>
 <body>
   <!-- PANTALLA DE AUTH -->
@@ -221,6 +221,22 @@
             <span class="card-label">Racha Máx. Ganadora</span>
             <span class="card-value" id="max-streak">0</span>
           </div>
+          <div class="card">
+            <span class="card-label">Racha Máx. Perdedora</span>
+            <span class="card-value" id="max-loss-streak">0</span>
+          </div>
+          <div class="card">
+            <span class="card-label">Max Drawdown</span>
+            <span class="card-value negative" id="max-drawdown">$0.00</span>
+          </div>
+          <div class="card">
+            <span class="card-label">Expectativa</span>
+            <span class="card-value" id="expectancy">$0.00</span>
+          </div>
+          <div class="card">
+            <span class="card-label">R:R Promedio</span>
+            <span class="card-value" id="avg-rr">--</span>
+          </div>
         </div>
 
         <!-- Equity Curve -->
@@ -242,6 +258,18 @@
           <div class="chart-box">
             <h3>Rendimiento por Día</h3>
             <div id="weekday-chart" class="bar-chart"></div>
+          </div>
+          <div class="chart-box">
+            <h3>Distribución de P&L</h3>
+            <div id="pnl-distribution-chart" class="bar-chart"></div>
+          </div>
+          <div class="chart-box">
+            <h3>Long vs Short</h3>
+            <div id="direction-chart" class="direction-chart"></div>
+          </div>
+          <div class="chart-box">
+            <h3>Rendimiento por Hora</h3>
+            <div id="hourly-chart" class="bar-chart"></div>
           </div>
         </div>
 
@@ -640,7 +668,7 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
-  <script src="js/firebase-config.js?v=25"></script>
-  <script src="js/app.js?v=25"></script>
+  <script src="js/firebase-config.js?v=26"></script>
+  <script src="js/app.js?v=26"></script>
 </body>
 </html>

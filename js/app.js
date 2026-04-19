@@ -1005,13 +1005,40 @@ function renderDashboard() {
   document.getElementById('best-trade').textContent = '+$' + bestTrade.toFixed(2);
   document.getElementById('worst-trade').textContent = '$' + worstTrade.toFixed(2);
 
-  // Racha máxima ganadora
+  // Racha máxima ganadora y perdedora
   let maxStreak = 0, curStreak = 0;
+  let maxLossStreak = 0, curLossStreak = 0;
   sorted.forEach(t => {
-    if (t.result === 'win') { curStreak++; maxStreak = Math.max(maxStreak, curStreak); }
-    else curStreak = 0;
+    if (t.result === 'win') { curStreak++; maxStreak = Math.max(maxStreak, curStreak); curLossStreak = 0; }
+    else if (t.result === 'loss') { curLossStreak++; maxLossStreak = Math.max(maxLossStreak, curLossStreak); curStreak = 0; }
+    else { curStreak = 0; curLossStreak = 0; }
   });
   document.getElementById('max-streak').textContent = maxStreak;
+  document.getElementById('max-loss-streak').textContent = maxLossStreak;
+
+  // Max Drawdown
+  let peak = 0, maxDD = 0, cum = 0;
+  sorted.forEach(t => {
+    cum += t.pnl;
+    if (cum > peak) peak = cum;
+    const dd = peak - cum;
+    if (dd > maxDD) maxDD = dd;
+  });
+  const ddEl = document.getElementById('max-drawdown');
+  ddEl.textContent = '-$' + maxDD.toFixed(2);
+
+  // Expectancy (expected $ per trade)
+  const expectancy = trades.length ? totalPnl / trades.length : 0;
+  const expEl = document.getElementById('expectancy');
+  expEl.textContent = (expectancy >= 0 ? '+' : '') + '$' + expectancy.toFixed(2);
+  expEl.className = 'card-value ' + (expectancy >= 0 ? 'positive' : 'negative');
+
+  // Average Risk:Reward ratio
+  const avgRR = avgLoss > 0 ? (avgWin / avgLoss).toFixed(2) : wins.length > 0 ? '∞' : '--';
+  const rrEl = document.getElementById('avg-rr');
+  rrEl.textContent = typeof avgRR === 'string' ? avgRR : '1:' + avgRR;
+  if (parseFloat(avgRR) >= 1) rrEl.className = 'card-value positive';
+  else if (!isNaN(parseFloat(avgRR))) rrEl.className = 'card-value negative';
 
   // Recent trades
   const recent = [...trades].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 5);
@@ -1029,6 +1056,9 @@ function renderDashboard() {
   renderMonthlyChart(sorted);
   renderAssetChart(trades);
   renderWeekdayChart(trades);
+  renderPnlDistribution(trades);
+  renderDirectionChart(trades);
+  renderHourlyChart(trades);
 }
 
 // ==================== EQUITY CURVE ====================
@@ -1138,6 +1168,96 @@ function renderWeekdayChart(trades) {
     const width = Math.round((Math.abs(pnl) / maxAbs) * 100);
     const cls = pnl >= 0 ? 'bar-positive' : 'bar-negative';
     return `<div class="bar-row"><span class="bar-label">${name.slice(0, 3)}</span><div class="bar-track"><div class="bar-fill ${cls}" style="width:${Math.max(width, 3)}%"></div></div><span class="bar-value ${pnl >= 0 ? 'positive' : 'negative'}">${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}</span></div>`;
+  }).join('');
+}
+
+// ==================== P&L DISTRIBUTION ====================
+function renderPnlDistribution(trades) {
+  const container = document.getElementById('pnl-distribution-chart');
+  if (trades.length === 0) { container.innerHTML = '<p class="empty-msg">No hay datos aun</p>'; return; }
+
+  const pnls = trades.map(t => t.pnl);
+  const min = Math.min(...pnls);
+  const max = Math.max(...pnls);
+  const range = max - min || 1;
+  const bucketCount = Math.min(10, trades.length);
+  const bucketSize = range / bucketCount;
+
+  const buckets = Array(bucketCount).fill(0);
+  const bucketLabels = [];
+  for (let i = 0; i < bucketCount; i++) {
+    const lo = min + i * bucketSize;
+    const hi = lo + bucketSize;
+    bucketLabels.push(lo);
+    pnls.forEach(p => {
+      if (i === bucketCount - 1 ? (p >= lo && p <= hi) : (p >= lo && p < hi)) buckets[i]++;
+    });
+  }
+
+  const maxCount = Math.max(...buckets, 1);
+  container.innerHTML = buckets.map((count, i) => {
+    const lo = bucketLabels[i];
+    const label = '$' + Math.round(lo);
+    const width = Math.round((count / maxCount) * 100);
+    const cls = lo >= 0 ? 'bar-positive' : 'bar-negative';
+    return `<div class="bar-row"><span class="bar-label">${label}</span><div class="bar-track"><div class="bar-fill ${cls}" style="width:${Math.max(width, 3)}%"></div></div><span class="bar-value">${count}</span></div>`;
+  }).join('');
+}
+
+// ==================== LONG VS SHORT ====================
+function renderDirectionChart(trades) {
+  const container = document.getElementById('direction-chart');
+  if (trades.length === 0) { container.innerHTML = '<p class="empty-msg">No hay datos aun</p>'; return; }
+
+  const longs = trades.filter(t => t.direction === 'long');
+  const shorts = trades.filter(t => t.direction === 'short');
+
+  const longPnl = longs.reduce((s, t) => s + t.pnl, 0);
+  const shortPnl = shorts.reduce((s, t) => s + t.pnl, 0);
+  const longWR = longs.length ? Math.round((longs.filter(t => t.result === 'win').length / longs.length) * 100) : 0;
+  const shortWR = shorts.length ? Math.round((shorts.filter(t => t.result === 'win').length / shorts.length) * 100) : 0;
+
+  container.innerHTML = `
+    <div class="direction-comparison">
+      <div class="direction-col">
+        <span class="direction-title badge badge-long">LONG</span>
+        <div class="direction-stats">
+          <div class="direction-stat"><span class="direction-stat-label">Trades</span><span class="direction-stat-value">${longs.length}</span></div>
+          <div class="direction-stat"><span class="direction-stat-label">Win Rate</span><span class="direction-stat-value">${longWR}%</span></div>
+          <div class="direction-stat"><span class="direction-stat-label">P&L</span><span class="direction-stat-value ${longPnl >= 0 ? 'positive' : 'negative'}">${longPnl >= 0 ? '+' : ''}$${longPnl.toFixed(2)}</span></div>
+        </div>
+      </div>
+      <div class="direction-vs">VS</div>
+      <div class="direction-col">
+        <span class="direction-title badge badge-short">SHORT</span>
+        <div class="direction-stats">
+          <div class="direction-stat"><span class="direction-stat-label">Trades</span><span class="direction-stat-value">${shorts.length}</span></div>
+          <div class="direction-stat"><span class="direction-stat-label">Win Rate</span><span class="direction-stat-value">${shortWR}%</span></div>
+          <div class="direction-stat"><span class="direction-stat-label">P&L</span><span class="direction-stat-value ${shortPnl >= 0 ? 'positive' : 'negative'}">${shortPnl >= 0 ? '+' : ''}$${shortPnl.toFixed(2)}</span></div>
+        </div>
+      </div>
+    </div>`;
+}
+
+// ==================== HOURLY CHART ====================
+function renderHourlyChart(trades) {
+  const container = document.getElementById('hourly-chart');
+  const tradesWithTime = trades.filter(t => t.entryTime);
+  if (tradesWithTime.length === 0) { container.innerHTML = '<p class="empty-msg">Añade hora de entrada a tus trades</p>'; return; }
+
+  const hourPnl = {};
+  tradesWithTime.forEach(t => {
+    const h = parseInt(t.entryTime.split(':')[0]);
+    const label = h.toString().padStart(2, '0') + ':00';
+    hourPnl[label] = (hourPnl[label] || 0) + t.pnl;
+  });
+
+  const entries = Object.entries(hourPnl).sort((a, b) => a[0].localeCompare(b[0]));
+  const maxAbs = Math.max(...entries.map(e => Math.abs(e[1])), 1);
+  container.innerHTML = entries.map(([hour, pnl]) => {
+    const width = Math.round((Math.abs(pnl) / maxAbs) * 100);
+    const cls = pnl >= 0 ? 'bar-positive' : 'bar-negative';
+    return `<div class="bar-row"><span class="bar-label">${hour}</span><div class="bar-track"><div class="bar-fill ${cls}" style="width:${Math.max(width, 3)}%"></div></div><span class="bar-value ${pnl >= 0 ? 'positive' : 'negative'}">${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}</span></div>`;
   }).join('');
 }
 
