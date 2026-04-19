@@ -1093,7 +1093,8 @@ function renderDashboard() {
 
 // ==================== EQUITY CURVE ====================
 let equityChart = null;
-let equitySeries = null;
+let equitySeriesClosed = null;
+let equitySeriesOpen = null;
 
 function renderEquityChart(sortedTrades) {
   const container = document.getElementById('equity-chart-container');
@@ -1101,50 +1102,69 @@ function renderEquityChart(sortedTrades) {
   if (!equityChart) {
     equityChart = LightweightCharts.createChart(container, {
       width: container.clientWidth,
-      height: 220,
+      height: 260,
       layout: { background: { color: '#1a1d27' }, textColor: '#8a8fa8' },
       grid: { vertLines: { color: '#2a2e3d' }, horzLines: { color: '#2a2e3d' } },
       rightPriceScale: { borderColor: '#2a2e3d' },
-      timeScale: { borderColor: '#2a2e3d', timeVisible: false },
+      timeScale: { borderColor: '#2a2e3d', timeVisible: true },
       crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
-      handleScroll: false,
-      handleScale: false,
+      handleScroll: true,
+      handleScale: true,
     });
-    equitySeries = equityChart.addAreaSeries({
+    // Serie principal: todos los trades (azul/morado)
+    equitySeriesClosed = equityChart.addAreaSeries({
       lineColor: '#6366f1',
-      topColor: '#6366f130',
+      topColor: '#6366f140',
       bottomColor: '#6366f100',
       lineWidth: 2,
       priceFormat: { type: 'price', precision: 2, minMove: 0.01 },
+      title: 'P&L Total',
     });
     const resizeObs = new ResizeObserver(() => equityChart.applyOptions({ width: container.clientWidth }));
     resizeObs.observe(container);
   }
 
   if (sortedTrades.length === 0) {
-    equitySeries.setData([]);
+    equitySeriesClosed.setData([]);
     return;
   }
 
-  let cumulative = 0;
-  const data = [];
-  const seen = new Set();
-  sortedTrades.forEach((t, i) => {
-    cumulative += t.pnl;
-    let time = t.date; // 'YYYY-MM-DD'
-    // Ensure unique timestamps by appending index offset if duplicate
-    if (seen.has(time)) {
-      // Use epoch seconds with offset
-      const base = Math.floor(new Date(time + 'T12:00:00').getTime() / 1000);
-      time = base + i;
-    } else {
-      seen.add(time);
-      time = Math.floor(new Date(time + 'T12:00:00').getTime() / 1000);
-    }
-    data.push({ time, value: parseFloat(cumulative.toFixed(2)) });
+  // Agrupar P&L por fecha: suma todos los trades del mismo día
+  const dailyPnl = {};
+  sortedTrades.forEach(t => {
+    const day = t.date;
+    dailyPnl[day] = (dailyPnl[day] || 0) + (t.pnl || 0);
   });
 
-  equitySeries.setData(data);
+  // Ordenar por fecha y calcular acumulado
+  const sortedDays = Object.keys(dailyPnl).sort();
+  let cumulative = 0;
+  const data = [];
+  sortedDays.forEach(day => {
+    cumulative += dailyPnl[day];
+    data.push({
+      time: day, // 'YYYY-MM-DD' — LightweightCharts acepta este formato directamente
+      value: parseFloat(cumulative.toFixed(2)),
+    });
+  });
+
+  // Añadir punto de hoy si la última fecha no es hoy y hay posiciones abiertas
+  const todayStr = new Date().toISOString().split('T')[0];
+  const hasOpen = sortedTrades.some(t => t.result === 'open');
+  if (hasOpen && data.length > 0 && data[data.length - 1].time !== todayStr) {
+    data.push({ time: todayStr, value: parseFloat(cumulative.toFixed(2)) });
+  }
+
+  equitySeriesClosed.setData(data);
+
+  // Colorear según si está en positivo o negativo
+  const lastVal = data[data.length - 1]?.value ?? 0;
+  equitySeriesClosed.applyOptions({
+    lineColor: lastVal >= 0 ? '#6366f1' : '#ef4444',
+    topColor: lastVal >= 0 ? '#6366f140' : '#ef444430',
+    bottomColor: '#00000000',
+  });
+
   equityChart.timeScale().fitContent();
 }
 
