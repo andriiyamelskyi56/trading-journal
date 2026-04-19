@@ -1236,14 +1236,17 @@ function renderWeekdayChart(trades) {
   const container = document.getElementById('weekday-chart');
   const days = ['Domingo', 'Lunes', 'Martes', 'Miercoles', 'Jueves', 'Viernes', 'Sabado'];
   const dayPnl = [0, 0, 0, 0, 0, 0, 0];
+  const dayCount = [0, 0, 0, 0, 0, 0, 0];
 
-  // P&L de trades cerrados por día de la semana
+  // P&L de trades cerrados: cada trade cuenta como 1 sesión en ese día
   trades.filter(t => t.result !== 'open').forEach(t => {
     const d = new Date(t.date + 'T12:00:00').getDay();
     dayPnl[d] += t.pnl;
+    dayCount[d]++;
   });
 
   // P&L diario de posiciones abiertas: (cierre_hoy - cierre_ayer) × lote × dirección
+  // Cada punto del historial cuenta como 1 sesión
   const openPos = getOpenPositions();
   openPos.forEach(pos => {
     const history = openHistoricalCache[pos.id];
@@ -1255,18 +1258,23 @@ function renderWeekdayChart(trades) {
       const dailyChange = (close - prevClose) * qty * dir;
       const dow = new Date(date + 'T12:00:00').getDay();
       dayPnl[dow] += dailyChange;
+      dayCount[dow]++;
       prevClose = close;
     });
   });
 
-  const maxAbs = Math.max(...dayPnl.map(v => Math.abs(v)), 1);
+  // Mostrar promedio por sesión (no acumulado) para evitar distorsión por duración
+  const avgPnl = dayPnl.map((total, i) => dayCount[i] > 0 ? total / dayCount[i] : 0);
+
+  const maxAbs = Math.max(...avgPnl.map(v => Math.abs(v)), 1);
   container.innerHTML = days.map((name, i) => {
-    const pnl = dayPnl[i];
+    const pnl = avgPnl[i];
     const width = pnl === 0 ? 0 : Math.max(Math.round((Math.abs(pnl) / maxAbs) * 100), 3);
     const cls = pnl > 0 ? 'bar-positive' : pnl < 0 ? 'bar-negative' : 'bar-zero';
     const valCls = pnl > 0 ? 'positive' : pnl < 0 ? 'negative' : 'neutral';
-    const valStr = pnl === 0 ? '$0.00' : `${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}`;
-    return `<div class="bar-row"><span class="bar-label">${name.slice(0, 3)}</span><div class="bar-track">${width > 0 ? `<div class="bar-fill ${cls}" style="width:${width}%"></div>` : ''}</div><span class="bar-value ${valCls}">${valStr}</span></div>`;
+    const valStr = pnl === 0 ? '$0.00' : `${pnl >= 0 ? '+' : ''}$${Math.abs(pnl) < 0.01 ? pnl.toFixed(3) : pnl.toFixed(2)}`;
+    const countStr = dayCount[i] > 0 ? ` <span style="color:#555;font-size:10px">(${dayCount[i]})</span>` : '';
+    return `<div class="bar-row"><span class="bar-label">${name.slice(0, 3)}</span><div class="bar-track">${width > 0 ? `<div class="bar-fill ${cls}" style="width:${width}%"></div>` : ''}</div><span class="bar-value ${valCls}">${valStr}${countStr}</span></div>`;
   }).join('');
 }
 
