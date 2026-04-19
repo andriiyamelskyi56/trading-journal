@@ -1225,9 +1225,11 @@ function renderWeekdayChart(trades) {
   const maxAbs = Math.max(...dayPnl.map(v => Math.abs(v)), 1);
   container.innerHTML = days.map((name, i) => {
     const pnl = dayPnl[i];
-    const width = Math.round((Math.abs(pnl) / maxAbs) * 100);
-    const cls = pnl >= 0 ? 'bar-positive' : 'bar-negative';
-    return `<div class="bar-row"><span class="bar-label">${name.slice(0, 3)}</span><div class="bar-track"><div class="bar-fill ${cls}" style="width:${Math.max(width, 3)}%"></div></div><span class="bar-value ${pnl >= 0 ? 'positive' : 'negative'}">${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}</span></div>`;
+    const width = pnl === 0 ? 0 : Math.max(Math.round((Math.abs(pnl) / maxAbs) * 100), 3);
+    const cls = pnl > 0 ? 'bar-positive' : pnl < 0 ? 'bar-negative' : 'bar-zero';
+    const valCls = pnl > 0 ? 'positive' : pnl < 0 ? 'negative' : 'neutral';
+    const valStr = pnl === 0 ? '$0.00' : `${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}`;
+    return `<div class="bar-row"><span class="bar-label">${name.slice(0, 3)}</span><div class="bar-track">${width > 0 ? `<div class="bar-fill ${cls}" style="width:${width}%"></div>` : ''}</div><span class="bar-value ${valCls}">${valStr}</span></div>`;
   }).join('');
 }
 
@@ -1315,9 +1317,10 @@ function renderHourlyChart(trades) {
   const entries = Object.entries(hourPnl).sort((a, b) => a[0].localeCompare(b[0]));
   const maxAbs = Math.max(...entries.map(e => Math.abs(e[1])), 1);
   container.innerHTML = entries.map(([hour, pnl]) => {
-    const width = Math.round((Math.abs(pnl) / maxAbs) * 100);
-    const cls = pnl >= 0 ? 'bar-positive' : 'bar-negative';
-    return `<div class="bar-row"><span class="bar-label">${hour}</span><div class="bar-track"><div class="bar-fill ${cls}" style="width:${Math.max(width, 3)}%"></div></div><span class="bar-value ${pnl >= 0 ? 'positive' : 'negative'}">${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}</span></div>`;
+    const width = pnl === 0 ? 0 : Math.max(Math.round((Math.abs(pnl) / maxAbs) * 100), 3);
+    const cls = pnl > 0 ? 'bar-positive' : 'bar-negative';
+    const valCls = pnl > 0 ? 'positive' : pnl < 0 ? 'negative' : 'neutral';
+    return `<div class="bar-row"><span class="bar-label">${hour}</span><div class="bar-track">${width > 0 ? `<div class="bar-fill ${cls}" style="width:${width}%"></div>` : ''}</div><span class="bar-value ${valCls}">${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}</span></div>`;
   }).join('');
 }
 

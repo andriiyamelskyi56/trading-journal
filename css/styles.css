@@ -257,6 +257,7 @@ a { color: var(--accent); text-decoration: none; }
 /* ==================== P&L COLORS ==================== */
 .positive { color: var(--green); }
 .negative { color: var(--red); }
+.neutral { color: var(--text-secondary); }
 .pnl { font-weight: 600; }
 
 /* ==================== FILTERS ==================== */
