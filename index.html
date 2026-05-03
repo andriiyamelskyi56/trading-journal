@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Trading Journal</title>
-  <link rel="stylesheet" href="css/styles.css?v=32">
+  <link rel="stylesheet" href="css/styles.css?v=38">
 </head>
 <body>
   <!-- PANTALLA DE AUTH -->
@@ -465,9 +465,10 @@
         <div class="charts-controls">
           <div class="charts-symbol-select">
             <label>Instrumento</label>
-            <select id="chart-symbol-select">
-              <option value="">-- Seleccionar --</option>
-            </select>
+            <div class="chart-search-wrapper">
+              <input type="text" id="chart-symbol-input" placeholder="Buscar instrumento..." autocomplete="off">
+              <div class="chart-search-dropdown" id="chart-search-dropdown"></div>
+            </div>
           </div>
           <div class="charts-range-btns">
             <label>Periodo</label>
@@ -481,6 +482,16 @@
               <button class="btn btn-sm" data-range="5Y">5Y</button>
             </div>
           </div>
+          <div class="charts-trades-toggle">
+            <label class="toggle-label"><input type="checkbox" id="chart-show-trades" checked> <span>Trades</span></label>
+          </div>
+          <div class="charts-compare-controls">
+            <button class="btn btn-sm" id="chart-compare-btn">+ Comparar</button>
+            <div class="chart-overlay-tags" id="chart-overlay-tags"></div>
+          </div>
+        </div>
+        <div class="chart-compare-panel" id="chart-compare-panel" style="display:none;">
+          <input type="text" id="chart-compare-input" placeholder="Escribe un símbolo y pulsa Enter..." autocomplete="off">
         </div>
 
         <div class="chart-main-container">
@@ -488,10 +499,12 @@
             <span class="chart-info-symbol" id="chart-info-symbol">--</span>
             <span class="chart-info-price" id="chart-info-price">--</span>
             <span class="chart-info-change" id="chart-info-change"></span>
+            <button class="chart-fullscreen-btn" id="chart-fullscreen-btn" title="Pantalla completa">&#x26F6;</button>
           </div>
           <div id="tv-chart-container" class="tv-chart-container">
-            <div class="chart-placeholder">Selecciona un instrumento para ver su gráfico</div>
+            <div class="chart-placeholder">Busca un instrumento para ver su gráfico</div>
           </div>
+          <div id="chart-trade-tooltip" class="chart-trade-tooltip" style="display:none;"></div>
         </div>
 
         <div class="chart-details-grid" id="chart-details-grid" style="display:none;">
@@ -512,12 +525,32 @@
             <span class="chart-detail-value" id="chart-detail-close">--</span>
           </div>
           <div class="chart-detail-card">
+            <span class="chart-detail-label">Cierre Anterior</span>
+            <span class="chart-detail-value" id="chart-detail-prevclose">--</span>
+          </div>
+          <div class="chart-detail-card">
             <span class="chart-detail-label">Volumen</span>
             <span class="chart-detail-value" id="chart-detail-volume">--</span>
           </div>
           <div class="chart-detail-card">
             <span class="chart-detail-label">Variación</span>
             <span class="chart-detail-value" id="chart-detail-change">--</span>
+          </div>
+          <div class="chart-detail-card chart-detail-card-wide">
+            <span class="chart-detail-label">Rango del Día</span>
+            <div class="day-range-bar">
+              <span class="day-range-low" id="day-range-low">--</span>
+              <div class="day-range-track"><div class="day-range-fill" id="day-range-fill"></div><div class="day-range-dot" id="day-range-dot"></div></div>
+              <span class="day-range-high" id="day-range-high">--</span>
+            </div>
+          </div>
+          <div class="chart-detail-card chart-detail-card-wide" id="chart-52w-card" style="display:none;">
+            <span class="chart-detail-label">Rango 52 Semanas</span>
+            <div class="day-range-bar">
+              <span class="day-range-low" id="52w-range-low">--</span>
+              <div class="day-range-track"><div class="day-range-fill" id="52w-range-fill"></div><div class="day-range-dot" id="52w-range-dot"></div></div>
+              <span class="day-range-high" id="52w-range-high">--</span>
+            </div>
           </div>
         </div>
       </section>
@@ -714,6 +747,6 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
   <script src="js/firebase-config.js?v=30"></script>
-  <script src="js/app.js?v=37"></script>
+  <script src="js/app.js?v=38"></script>
 </body>
 </html>

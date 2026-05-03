@@ -2146,6 +2146,26 @@ let currentChartRange = '1M';
 let currentChartType = 'stock';
 let chartWebSocket = null;
 let chartPollInterval = null;
+let lastChartData = null;
+let chartFullscreen = false;
+let chartTradePriceLines = [];
+let chartOverlaySeries = [];
+let allChartInstruments = [];
+let crosshairActive = false;
+
+// DOM refs for crosshair perf
+let _elInfoPrice, _elInfoChange, _elInfoSymbol, _elDetailOpen, _elDetailHigh, _elDetailLow, _elDetailClose, _elDetailVolume, _elDetailChange;
+function cacheChartDomRefs() {
+  _elInfoPrice = document.getElementById('chart-info-price');
+  _elInfoChange = document.getElementById('chart-info-change');
+  _elInfoSymbol = document.getElementById('chart-info-symbol');
+  _elDetailOpen = document.getElementById('chart-detail-open');
+  _elDetailHigh = document.getElementById('chart-detail-high');
+  _elDetailLow = document.getElementById('chart-detail-low');
+  _elDetailClose = document.getElementById('chart-detail-close');
+  _elDetailVolume = document.getElementById('chart-detail-volume');
+  _elDetailChange = document.getElementById('chart-detail-change');
+}
 
 function getChartRangeParams(range) {
   const ranges = {
@@ -2273,11 +2293,306 @@ function initChart() {
     scaleMargins: { top: 0.8, bottom: 0 },
   });
 
+  // Crosshair OHLCV display
+  cacheChartDomRefs();
+  tvChart.subscribeCrosshairMove((param) => {
+    if (!param.time || !param.seriesData || param.seriesData.size === 0) {
+      if (crosshairActive && lastChartData) {
+        crosshairActive = false;
+        restoreInfoBarToLast();
+      }
+      hideTradeTooltip();
+      return;
+    }
+    crosshairActive = true;
+    const cd = param.seriesData.get(tvCandleSeries);
+    const vd = param.seriesData.get(tvVolumeSeries);
+    if (cd && 'open' in cd) {
+      const t = currentChartType;
+      _elInfoPrice.textContent = formatPrice(cd.close, t);
+      _elDetailOpen.textContent = formatPrice(cd.open, t);
+      _elDetailHigh.textContent = formatPrice(cd.high, t);
+      _elDetailLow.textContent = formatPrice(cd.low, t);
+      _elDetailClose.textContent = formatPrice(cd.close, t);
+      if (vd && 'value' in vd) _elDetailVolume.textContent = formatVolume(vd.value);
+    }
+    handleTradeTooltip(param);
+  });
+
   // Responsive resize
   const resizeObserver = new ResizeObserver(() => {
     tvChart.applyOptions({ width: container.clientWidth });
+    if (chartFullscreen) tvChart.applyOptions({ height: container.clientHeight });
   });
   resizeObserver.observe(container);
+}
+
+function restoreInfoBarToLast() {
+  if (!lastChartData) return;
+  const d = lastChartData;
+  const t = d.type;
+  _elInfoPrice.textContent = d.price != null ? formatPrice(d.price, t) : '--';
+  _elDetailOpen.textContent = d.open != null ? formatPrice(d.open, t) : '--';
+  _elDetailHigh.textContent = d.high != null ? formatPrice(d.high, t) : '--';
+  _elDetailLow.textContent = d.low != null ? formatPrice(d.low, t) : '--';
+  _elDetailClose.textContent = d.close != null ? formatPrice(d.close, t) : '--';
+  _elDetailVolume.textContent = d.volume != null ? formatVolume(d.volume) : '--';
+  if (d.price != null && d.prevClose) {
+    const change = d.price - d.prevClose;
+    const changePct = (change / d.prevClose) * 100;
+    const sign = change >= 0 ? '+' : '';
+    _elInfoChange.textContent = `${sign}${formatPrice(change, t)} (${sign}${changePct.toFixed(2)}%)`;
+    _elInfoChange.className = `chart-info-change ${change >= 0 ? 'positive' : 'negative'}`;
+  }
+}
+
+// ==================== TRADE MARKERS ON CHART ====================
+function findTradesForSymbol(symbol) {
+  const norm = s => (s || '').replace(/[\/\-\s]/g, '').toUpperCase();
+  const cs = norm(symbol);
+  return tradesCache.filter(t => {
+    const a = norm(t.asset);
+    const ms = norm(t.marketSymbol);
+    return (a && (cs.includes(a) || a.includes(cs))) ||
+           (ms && (cs === ms || cs.includes(ms)));
+  });
+}
+
+function clearTradeMarkers() {
+  if (tvCandleSeries) tvCandleSeries.setMarkers([]);
+  chartTradePriceLines.forEach(pl => { try { tvCandleSeries.removePriceLine(pl); } catch(e){} });
+  chartTradePriceLines = [];
+}
+
+function renderTradeMarkersOnChart(symbol, type) {
+  clearTradeMarkers();
+  if (!document.getElementById('chart-show-trades')?.checked) return;
+  const trades = findTradesForSymbol(symbol);
+  if (trades.length === 0) return;
+
+  const markers = [];
+  trades.forEach(t => {
+    if (!t.date || !t.entry) return;
+    const ts = Math.floor(new Date(t.date + 'T00:00:00Z').getTime() / 1000);
+    const isLong = (t.direction === 'long' || t.direction === 'buy');
+    markers.push({
+      time: ts,
+      position: isLong ? 'belowBar' : 'aboveBar',
+      color: isLong ? '#22c55e' : '#ef4444',
+      shape: isLong ? 'arrowUp' : 'arrowDown',
+      text: (isLong ? 'BUY' : 'SELL') + ' ' + formatPrice(t.entry, type),
+    });
+
+    if (t.result === 'open') {
+      if (t.entry) {
+        chartTradePriceLines.push(tvCandleSeries.createPriceLine({
+          price: t.entry, color: '#6366f1', lineWidth: 1,
+          lineStyle: LightweightCharts.LineStyle.Dotted, axisLabelVisible: true, title: 'Entry',
+        }));
+      }
+      if (t.sl) {
+        chartTradePriceLines.push(tvCandleSeries.createPriceLine({
+          price: t.sl, color: '#ef4444', lineWidth: 1,
+          lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: true, title: 'SL',
+        }));
+      }
+      if (t.tp) {
+        chartTradePriceLines.push(tvCandleSeries.createPriceLine({
+          price: t.tp, color: '#22c55e', lineWidth: 1,
+          lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: true, title: 'TP',
+        }));
+      }
+    }
+  });
+
+  markers.sort((a, b) => a.time - b.time);
+  tvCandleSeries.setMarkers(markers);
+}
+
+// ==================== TRADE TOOLTIP ====================
+function handleTradeTooltip(param) {
+  const tooltip = document.getElementById('chart-trade-tooltip');
+  if (!tooltip) return;
+  const trades = findTradesForSymbol(currentChartSymbol);
+  const match = trades.find(t => {
+    if (!t.date) return false;
+    const ts = Math.floor(new Date(t.date + 'T00:00:00Z').getTime() / 1000);
+    return ts === param.time;
+  });
+  if (match && param.point) {
+    const isLong = (match.direction === 'long' || match.direction === 'buy');
+    tooltip.innerHTML = `
+      <div class="tooltip-row"><span class="tooltip-label">Dirección</span><span class="badge badge-${match.direction}">${(match.direction || '').toUpperCase()}</span></div>
+      <div class="tooltip-row"><span class="tooltip-label">Entrada</span><span>${formatPrice(match.entry, currentChartType)}</span></div>
+      ${match.exit ? `<div class="tooltip-row"><span class="tooltip-label">Salida</span><span>${formatPrice(match.exit, currentChartType)}</span></div>` : ''}
+      ${match.pnl != null ? `<div class="tooltip-row"><span class="tooltip-label">P&L</span><span class="${match.pnl >= 0 ? 'positive' : 'negative'}">${match.pnl >= 0 ? '+' : ''}$${match.pnl.toFixed(2)}</span></div>` : ''}
+      <div class="tooltip-row"><span class="tooltip-label">Resultado</span><span>${(match.result || '').toUpperCase()}</span></div>`;
+    tooltip.style.display = 'block';
+    tooltip.style.left = Math.min(param.point.x + 16, tooltip.parentElement.clientWidth - 230) + 'px';
+    tooltip.style.top = (param.point.y - 20) + 'px';
+  } else {
+    tooltip.style.display = 'none';
+  }
+}
+function hideTradeTooltip() {
+  const t = document.getElementById('chart-trade-tooltip');
+  if (t) t.style.display = 'none';
+}
+
+// ==================== FULLSCREEN ====================
+function toggleChartFullscreen() {
+  chartFullscreen = !chartFullscreen;
+  const wrapper = document.getElementById('charts');
+  const btn = document.getElementById('chart-fullscreen-btn');
+  if (chartFullscreen) {
+    wrapper.classList.add('chart-fullscreen');
+    document.body.classList.add('chart-fullscreen-active');
+    btn.innerHTML = '&#10005;';
+    requestAnimationFrame(() => {
+      const c = document.getElementById('tv-chart-container');
+      tvChart.applyOptions({ width: c.clientWidth, height: c.clientHeight });
+    });
+  } else {
+    wrapper.classList.remove('chart-fullscreen');
+    document.body.classList.remove('chart-fullscreen-active');
+    btn.innerHTML = '&#x26F6;';
+    requestAnimationFrame(() => {
+      const c = document.getElementById('tv-chart-container');
+      tvChart.applyOptions({ width: c.clientWidth, height: 500 });
+    });
+  }
+}
+
+// ==================== COMPARE INSTRUMENTS ====================
+function clearAllOverlays() {
+  chartOverlaySeries.forEach(o => { try { tvChart.removeSeries(o.series); } catch(e){} });
+  chartOverlaySeries = [];
+  const tags = document.getElementById('chart-overlay-tags');
+  if (tags) tags.innerHTML = '';
+  const panel = document.getElementById('chart-compare-panel');
+  if (panel) panel.style.display = 'none';
+  const btn = document.getElementById('chart-compare-btn');
+  if (btn) btn.classList.remove('active');
+}
+
+async function addCompareOverlay(symbol, type) {
+  if (chartOverlaySeries.length >= 2) return;
+  const colors = ['#f59e0b', '#06b6d4'];
+  const color = colors[chartOverlaySeries.length];
+  const data = await fetchChartData(symbol, type, currentChartRange);
+  if (!data || data.candles.length === 0) return;
+
+  const first = data.candles[0].close;
+  const normData = data.candles.map(c => ({
+    time: c.time,
+    value: ((c.close - first) / first) * 100,
+  }));
+
+  const series = tvChart.addLineSeries({
+    color, lineWidth: 2, priceScaleId: 'compare-overlay',
+    lastValueVisible: true, priceLineVisible: false,
+    priceFormat: { type: 'custom', formatter: v => v.toFixed(2) + '%' },
+  });
+  series.setData(normData);
+  chartOverlaySeries.push({ series, symbol, type, color });
+  renderOverlayTags();
+}
+
+function removeCompareOverlay(idx) {
+  const o = chartOverlaySeries[idx];
+  if (o) { try { tvChart.removeSeries(o.series); } catch(e){} }
+  chartOverlaySeries.splice(idx, 1);
+  renderOverlayTags();
+}
+
+function renderOverlayTags() {
+  const tags = document.getElementById('chart-overlay-tags');
+  if (!tags) return;
+  tags.innerHTML = chartOverlaySeries.map((o, i) => `
+    <span class="chart-overlay-tag"><span class="tag-dot" style="background:${o.color}"></span>${o.symbol}
+    <button data-remove-overlay="${i}">&times;</button></span>`).join('');
+  tags.querySelectorAll('[data-remove-overlay]').forEach(btn => {
+    btn.addEventListener('click', () => removeCompareOverlay(parseInt(btn.dataset.removeOverlay)));
+  });
+}
+
+// ==================== SYMBOL SEARCH ====================
+function populateChartSymbols() {
+  allChartInstruments = [];
+  (watchlistsCache || []).forEach(wl => {
+    if (wl.instruments) {
+      wl.instruments.forEach(inst => {
+        if (!allChartInstruments.find(i => i.symbol === inst.symbol)) {
+          allChartInstruments.push({ symbol: inst.symbol, name: inst.name || '', type: inst.type || 'stock' });
+        }
+      });
+    }
+  });
+  const input = document.getElementById('chart-symbol-input');
+  if (input && currentChartSymbol) {
+    const found = allChartInstruments.find(i => i.symbol === currentChartSymbol);
+    if (found) input.value = `${found.symbol} — ${found.name}`;
+  }
+}
+
+function filterChartInstruments(query) {
+  const q = query.toLowerCase().trim();
+  if (!q) return allChartInstruments.slice(0, 20);
+  return allChartInstruments.filter(i =>
+    i.symbol.toLowerCase().includes(q) || i.name.toLowerCase().includes(q)
+  ).slice(0, 15);
+}
+
+function renderChartSearchResults(results) {
+  const dd = document.getElementById('chart-search-dropdown');
+  if (!dd) return;
+  if (results.length === 0) {
+    dd.innerHTML = '<div class="chart-search-empty">Sin resultados</div>';
+    dd.classList.add('open');
+    return;
+  }
+  const typeLabels = { crypto: 'CRYPTO', stock: 'STOCK', forex: 'FOREX' };
+  dd.innerHTML = results.map((inst, i) => `
+    <div class="chart-search-item${i === 0 ? ' active' : ''}" data-symbol="${inst.symbol}" data-type="${inst.type}" data-idx="${i}">
+      <span class="search-item-symbol">${escapeHtml(inst.symbol)}</span>
+      <span class="search-item-name">${escapeHtml(inst.name)}</span>
+      <span class="search-item-badge search-badge-${inst.type}">${typeLabels[inst.type] || inst.type.toUpperCase()}</span>
+    </div>`).join('');
+  dd.classList.add('open');
+}
+
+function selectChartSearchItem(symbol, type) {
+  const inst = allChartInstruments.find(i => i.symbol === symbol);
+  const input = document.getElementById('chart-symbol-input');
+  input.value = inst ? `${inst.symbol} — ${inst.name}` : symbol;
+  document.getElementById('chart-search-dropdown').classList.remove('open');
+  loadChart(symbol, type, currentChartRange);
+}
+
+// ==================== DAY RANGE BAR + ENHANCED DETAILS ====================
+function formatMarketCap(cap) {
+  if (cap >= 1e12) return '$' + (cap / 1e12).toFixed(2) + 'T';
+  if (cap >= 1e9) return '$' + (cap / 1e9).toFixed(2) + 'B';
+  if (cap >= 1e6) return '$' + (cap / 1e6).toFixed(2) + 'M';
+  return '$' + cap.toLocaleString();
+}
+
+function updateDayRangeBar(low, high, current, type, prefix) {
+  const elLow = document.getElementById(prefix + '-low');
+  const elHigh = document.getElementById(prefix + '-high');
+  const elFill = document.getElementById(prefix + '-fill');
+  const elDot = document.getElementById(prefix + '-dot');
+  if (!elLow) return;
+  elLow.textContent = low != null ? formatPrice(low, type) : '--';
+  elHigh.textContent = high != null ? formatPrice(high, type) : '--';
+  if (low != null && high != null && current != null && high > low) {
+    const pct = Math.max(0, Math.min(100, ((current - low) / (high - low)) * 100));
+    elFill.style.width = pct + '%';
+    elDot.style.left = pct + '%';
+  } else {
+    elFill.style.width = '0%';
+    elDot.style.left = '0%';
+  }
 }
 
 async function fetchChartData(symbol, type, range) {
@@ -2342,6 +2657,8 @@ async function fetchChartData(symbol, type, range) {
         open: candles.length > 0 ? candles[candles.length - 1].open : null,
         close: meta?.regularMarketPrice,
         volume: meta?.regularMarketVolume,
+        fiftyTwoWeekHigh: meta?.fiftyTwoWeekHigh || null,
+        fiftyTwoWeekLow: meta?.fiftyTwoWeekLow || null,
       };
     } catch (err) {
       console.warn(`Chart proxy error for ${symbol}:`, err.message);
@@ -2479,6 +2796,29 @@ async function loadChart(symbol, type, range) {
     document.getElementById('chart-detail-change').textContent = '--';
   }
 
+  // Enhanced detail fields
+  const elPrevClose = document.getElementById('chart-detail-prevclose');
+  if (elPrevClose) elPrevClose.textContent = data.prevClose != null ? formatPrice(data.prevClose, type) : '--';
+  updateDayRangeBar(data.low, data.high, data.price, type, 'day-range');
+  const el52Card = document.getElementById('chart-52w-card');
+  if (el52Card) {
+    if (data.fiftyTwoWeekHigh != null && data.fiftyTwoWeekLow != null) {
+      el52Card.style.display = '';
+      updateDayRangeBar(data.fiftyTwoWeekLow, data.fiftyTwoWeekHigh, data.price, type, '52w-range');
+    } else {
+      el52Card.style.display = 'none';
+    }
+  }
+
+  // Save for crosshair restore
+  lastChartData = { price: data.price, prevClose: data.prevClose, open: data.open, high: data.high, low: data.low, close: data.close, volume: data.volume, type };
+
+  // Clear overlays from previous symbol
+  clearAllOverlays();
+
+  // Mark trades on chart
+  renderTradeMarkersOnChart(symbol, type);
+
   // Start real-time updates
   if (type === 'crypto') {
     startCryptoWebSocket(symbol, range);
@@ -2546,12 +2886,14 @@ function startCryptoWebSocket(symbol, range) {
     tvCandleSeries.update(candle);
     tvVolumeSeries.update(volume);
 
-    // Update info bar and details
-    updateChartInfoBar(candle.close, null);
-    document.getElementById('chart-detail-open').textContent = formatPrice(candle.open, 'crypto');
-    document.getElementById('chart-detail-high').textContent = formatPrice(candle.high, 'crypto');
-    document.getElementById('chart-detail-low').textContent = formatPrice(candle.low, 'crypto');
-    document.getElementById('chart-detail-volume').textContent = formatVolume(parseFloat(k.v));
+    lastChartData = { ...lastChartData, price: candle.close, open: candle.open, high: candle.high, low: candle.low, close: candle.close, volume: parseFloat(k.v) };
+    if (!crosshairActive) {
+      updateChartInfoBar(candle.close, null);
+      document.getElementById('chart-detail-open').textContent = formatPrice(candle.open, 'crypto');
+      document.getElementById('chart-detail-high').textContent = formatPrice(candle.high, 'crypto');
+      document.getElementById('chart-detail-low').textContent = formatPrice(candle.low, 'crypto');
+      document.getElementById('chart-detail-volume').textContent = formatVolume(parseFloat(k.v));
+    }
   };
 
   chartWebSocket.onerror = (err) => {
@@ -2572,7 +2914,8 @@ function startStockPolling(symbol, type, range) {
         const lastVolume = data.volumes[data.volumes.length - 1];
         tvCandleSeries.update(lastCandle);
         tvVolumeSeries.update(lastVolume);
-        updateChartInfoBar(data.price, data.prevClose);
+        lastChartData = { price: data.price, prevClose: data.prevClose, open: data.open, high: data.high, low: data.low, close: data.close, volume: data.volume, type };
+        if (!crosshairActive) updateChartInfoBar(data.price, data.prevClose);
       }
     } catch (err) {
       console.warn('Chart poll error:', err);
@@ -2580,23 +2923,63 @@ function startStockPolling(symbol, type, range) {
   }, 30000);
 }
 
-// Chart event listeners
-document.getElementById('chart-symbol-select').addEventListener('change', (e) => {
-  const opt = e.target.selectedOptions[0];
-  if (!opt || !opt.value) return;
-  const type = opt.dataset.type || 'stock';
-  loadChart(opt.value, type, currentChartRange);
-});
+// Chart event listeners — symbol search
+let chartSearchIdx = 0;
+const _chartInput = document.getElementById('chart-symbol-input');
+const _chartDropdown = document.getElementById('chart-search-dropdown');
 
+if (_chartInput) {
+  _chartInput.addEventListener('input', () => {
+    chartSearchIdx = 0;
+    renderChartSearchResults(filterChartInstruments(_chartInput.value));
+  });
+  _chartInput.addEventListener('focus', () => {
+    renderChartSearchResults(filterChartInstruments(_chartInput.value));
+  });
+  _chartInput.addEventListener('keydown', (e) => {
+    const items = _chartDropdown.querySelectorAll('.chart-search-item');
+    if (e.key === 'ArrowDown') { e.preventDefault(); chartSearchIdx = Math.min(chartSearchIdx + 1, items.length - 1); items.forEach((it, i) => it.classList.toggle('active', i === chartSearchIdx)); items[chartSearchIdx]?.scrollIntoView({ block: 'nearest' }); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); chartSearchIdx = Math.max(chartSearchIdx - 1, 0); items.forEach((it, i) => it.classList.toggle('active', i === chartSearchIdx)); items[chartSearchIdx]?.scrollIntoView({ block: 'nearest' }); }
+    else if (e.key === 'Enter') { e.preventDefault(); const a = items[chartSearchIdx]; if (a) selectChartSearchItem(a.dataset.symbol, a.dataset.type); }
+    else if (e.key === 'Escape') { _chartDropdown.classList.remove('open'); }
+  });
+  document.addEventListener('click', (e) => { if (!e.target.closest('.chart-search-wrapper')) _chartDropdown.classList.remove('open'); });
+  _chartDropdown.addEventListener('click', (e) => { const item = e.target.closest('.chart-search-item'); if (item) selectChartSearchItem(item.dataset.symbol, item.dataset.type); });
+}
+
+// Range buttons
 document.getElementById('chart-range-btns').addEventListener('click', (e) => {
   const btn = e.target.closest('[data-range]');
   if (!btn) return;
   document.querySelectorAll('#chart-range-btns .btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   currentChartRange = btn.dataset.range;
-  if (currentChartSymbol) {
-    loadChart(currentChartSymbol, currentChartType, currentChartRange);
-  }
+  if (currentChartSymbol) loadChart(currentChartSymbol, currentChartType, currentChartRange);
+});
+
+// Fullscreen
+document.getElementById('chart-fullscreen-btn')?.addEventListener('click', toggleChartFullscreen);
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && chartFullscreen) toggleChartFullscreen(); });
+
+// Show trades toggle
+document.getElementById('chart-show-trades')?.addEventListener('change', () => {
+  if (currentChartSymbol) renderTradeMarkersOnChart(currentChartSymbol, currentChartType);
+});
+
+// Compare button
+document.getElementById('chart-compare-btn')?.addEventListener('click', () => {
+  const panel = document.getElementById('chart-compare-panel');
+  const btn = document.getElementById('chart-compare-btn');
+  if (panel.style.display === 'none') { panel.style.display = 'block'; btn.classList.add('active'); }
+  else { clearAllOverlays(); }
+});
+document.getElementById('chart-compare-input')?.addEventListener('keydown', async (e) => {
+  if (e.key !== 'Enter') return;
+  const val = e.target.value.trim().toUpperCase();
+  if (!val) return;
+  const inst = allChartInstruments.find(i => i.symbol.toUpperCase() === val);
+  await addCompareOverlay(val, inst?.type || 'stock');
+  e.target.value = '';
 });
 
 // ==================== OPEN POSITIONS ====================
