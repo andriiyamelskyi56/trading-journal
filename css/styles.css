@@ -1738,6 +1738,27 @@ a { color: var(--accent); text-decoration: none; }
   100% { background: transparent; }
 }
 
+/* Schwab status */
+.schwab-status-bar {
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-card);
+  transition: border-color 0.2s;
+}
+.schwab-status-bar:hover { border-color: var(--accent); }
+.schwab-dot {
+  width: 8px; height: 8px; border-radius: 50%; display: inline-block;
+}
+.schwab-on { background: #22c55e; box-shadow: 0 0 4px #22c55e; }
+.schwab-off { background: #ef4444; }
+
 /* ==================== CHARTS SECTION ==================== */
 .charts-controls {
   display: flex;

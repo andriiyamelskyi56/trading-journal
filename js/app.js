@@ -1986,10 +1986,19 @@ async function fetchQuotes() {
     }
   }
 
-  // Fetch stock/forex quotes via Yahoo Finance
+  // Fetch stock/forex quotes — Schwab first, then Yahoo fallback
   if (otherInstruments.length > 0) {
     const stockQuotePromises = otherInstruments.map(async (inst) => {
-      // Try Yahoo Finance via CORS proxy
+      // Try Schwab API first
+      if (schwabConnected) {
+        const sq = await fetchSchwabQuote(inst.symbol);
+        if (sq) return {
+          symbol: inst.symbol, name: inst.name, type: inst.type,
+          price: sq.price, change: sq.change, changePercent: sq.changePercent,
+          high: sq.high, low: sq.low, volume: sq.volume,
+        };
+      }
+      // Fallback: Yahoo Finance via CORS proxy
       try {
         const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(inst.symbol)}?interval=1d&range=1d`;
         const controller2 = new AbortController();
@@ -2135,6 +2144,114 @@ function startQuotesAutoRefresh() {
 
 function stopQuotesAutoRefresh() {
   if (quotesInterval) { clearInterval(quotesInterval); quotesInterval = null; }
+}
+
+// ==================== SCHWAB API ====================
+const SCHWAB_WORKER_URL = localStorage.getItem('schwab_worker_url') || '';
+let schwabConnected = false;
+
+async function checkSchwabStatus() {
+  if (!SCHWAB_WORKER_URL) { schwabConnected = false; updateSchwabIndicator(); return; }
+  try {
+    const res = await fetch(SCHWAB_WORKER_URL + '/status');
+    if (res.ok) {
+      const data = await res.json();
+      schwabConnected = data.connected && data.refreshValid;
+    }
+  } catch { schwabConnected = false; }
+  updateSchwabIndicator();
+}
+
+function updateSchwabIndicator() {
+  const el = document.getElementById('schwab-status');
+  if (!el) return;
+  if (!SCHWAB_WORKER_URL) {
+    el.innerHTML = '<span class="schwab-dot schwab-off"></span> No configurado';
+    el.onclick = promptSchwabSetup;
+  } else if (schwabConnected) {
+    el.innerHTML = '<span class="schwab-dot schwab-on"></span> Schwab conectado';
+    el.onclick = null;
+  } else {
+    el.innerHTML = '<span class="schwab-dot schwab-off"></span> Conectar Schwab';
+    el.onclick = () => window.open(SCHWAB_WORKER_URL + '/login', '_blank');
+  }
+}
+
+function promptSchwabSetup() {
+  const url = prompt('Pega la URL de tu Schwab Worker (ej: https://schwab-proxy.xxx.workers.dev):');
+  if (url && url.startsWith('https://')) {
+    localStorage.setItem('schwab_worker_url', url.replace(/\/$/, ''));
+    location.reload();
+  }
+}
+
+async function fetchSchwabQuote(symbol) {
+  if (!schwabConnected || !SCHWAB_WORKER_URL) return null;
+  try {
+    const res = await fetch(`${SCHWAB_WORKER_URL}/api/${encodeURIComponent(symbol)}/quotes`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    const q = data[symbol]?.quote;
+    if (!q) return null;
+    return {
+      price: q.lastPrice,
+      change: q.netChange,
+      changePercent: q.netPercentChangeInDouble,
+      high: q.highPrice,
+      low: q.lowPrice,
+      open: q.openPrice,
+      close: q.lastPrice,
+      volume: q.totalVolume,
+      prevClose: q.closePrice,
+      fiftyTwoWeekHigh: q['52WkHigh'] || null,
+      fiftyTwoWeekLow: q['52WkLow'] || null,
+    };
+  } catch { return null; }
+}
+
+async function fetchSchwabPriceHistory(symbol, range) {
+  if (!schwabConnected || !SCHWAB_WORKER_URL) return null;
+  const params = getSchwabHistoryParams(range);
+  try {
+    const res = await fetch(`${SCHWAB_WORKER_URL}/api/pricehistory?symbol=${encodeURIComponent(symbol)}&periodType=${params.periodType}&period=${params.period}&frequencyType=${params.frequencyType}&frequency=${params.frequency}`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data.candles || data.candles.length === 0) return null;
+    const candles = [];
+    const volumes = [];
+    data.candles.forEach(c => {
+      const time = Math.floor(c.datetime / 1000);
+      candles.push({ time, open: c.open, high: c.high, low: c.low, close: c.close });
+      volumes.push({ time, value: c.volume || 0, color: c.close >= c.open ? '#22c55e40' : '#ef444440' });
+    });
+    const last = candles[candles.length - 1];
+    const quote = await fetchSchwabQuote(symbol);
+    return {
+      candles, volumes,
+      price: quote?.price || last.close,
+      prevClose: quote?.prevClose || (candles.length > 1 ? candles[candles.length - 2].close : null),
+      high: quote?.high || last.high,
+      low: quote?.low || last.low,
+      open: quote?.open || last.open,
+      close: quote?.close || last.close,
+      volume: quote?.volume || null,
+      fiftyTwoWeekHigh: quote?.fiftyTwoWeekHigh || null,
+      fiftyTwoWeekLow: quote?.fiftyTwoWeekLow || null,
+    };
+  } catch { return null; }
+}
+
+function getSchwabHistoryParams(range) {
+  switch (range) {
+    case '1D': return { periodType: 'day', period: 1, frequencyType: 'minute', frequency: 5 };
+    case '5D': return { periodType: 'day', period: 5, frequencyType: 'minute', frequency: 15 };
+    case '1M': return { periodType: 'month', period: 1, frequencyType: 'daily', frequency: 1 };
+    case '3M': return { periodType: 'month', period: 3, frequencyType: 'daily', frequency: 1 };
+    case '6M': return { periodType: 'month', period: 6, frequencyType: 'daily', frequency: 1 };
+    case '1Y': return { periodType: 'year', period: 1, frequencyType: 'weekly', frequency: 1 };
+    case '5Y': return { periodType: 'year', period: 5, frequencyType: 'monthly', frequency: 1 };
+    default: return { periodType: 'month', period: 1, frequencyType: 'daily', frequency: 1 };
+  }
 }
 
 // ==================== CHARTS SECTION ====================
@@ -2602,7 +2719,13 @@ async function fetchChartData(symbol, type, range) {
     return fetchBinanceCandles(symbol, range);
   }
 
-  // Stocks/Forex: Yahoo Finance via CORS proxy
+  // Try Schwab first for stocks
+  if (type === 'stock' && schwabConnected) {
+    const schwabData = await fetchSchwabPriceHistory(symbol, range);
+    if (schwabData) return schwabData;
+  }
+
+  // Fallback: Yahoo Finance via CORS proxy
   const corsProxies = [
     url => `https://corsproxy.io/?${url}`,
     url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
@@ -2991,7 +3114,12 @@ async function fetchPriceForPosition(pos) {
       const res = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${encodeURIComponent(symbol)}`);
       if (res.ok) { const d = await res.json(); return parseFloat(d.price); }
     } else {
-      // Yahoo Finance via CORS proxy
+      // Try Schwab first
+      if (schwabConnected) {
+        const sq = await fetchSchwabQuote(symbol);
+        if (sq?.price) return sq.price;
+      }
+      // Fallback: Yahoo Finance via CORS proxy
       const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1d`;
       const res2 = await fetch(`https://corsproxy.io/?${yahooUrl}`);
       if (res2.ok) { const d2 = await res2.json(); const p = d2?.chart?.result?.[0]?.meta?.regularMarketPrice; if (p) return p; }
@@ -3222,6 +3350,7 @@ async function renderOpenPnlCurves(results) {
 document.getElementById('refresh-open-btn').addEventListener('click', renderOpenPositions);
 
 function refreshAll() {
+  checkSchwabStatus();
   renderDashboard();
   renderCalendar();
   renderTradesTable();
