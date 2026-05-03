@@ -1,0 +1,10 @@
+name = "schwab-proxy"
+main = "index.js"
+compatibility_date = "2024-01-01"
+
+[vars]
+APP_ORIGIN = "https://andriiyamelskyi56.github.io"
+
+[[kv_namespaces]]
+binding = "TOKENS"
+id = ""
