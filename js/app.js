@@ -2147,7 +2147,9 @@ function stopQuotesAutoRefresh() {
 }
 
 // ==================== SCHWAB API ====================
-const SCHWAB_WORKER_URL = localStorage.getItem('schwab_worker_url') || 'https://schwab-proxy.andriiyamelskyi56.workers.dev';
+const SCHWAB_WORKER_URL = (localStorage.getItem('schwab_worker_url') || 'https://schwab-proxy.andriiyamelskyi56.workers.dev')
+  .replace(/\/(callback|login|status|api)(\/.*)?$/, '')
+  .replace(/\/+$/, '');
 let schwabConnected = false;
 
 async function checkSchwabStatus() {
