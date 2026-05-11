@@ -1102,12 +1102,21 @@ function renderEquityChart(sortedTrades) {
 
   if (!equityChart) {
     equityChart = LightweightCharts.createChart(container, {
-      width: container.clientWidth,
-      height: 260,
+      autoSize: true,
       layout: { background: { color: '#1a1d27' }, textColor: '#8a8fa8' },
       grid: { vertLines: { color: '#2a2e3d' }, horzLines: { color: '#2a2e3d' } },
-      rightPriceScale: { borderColor: '#2a2e3d' },
-      timeScale: { borderColor: '#2a2e3d', timeVisible: true },
+      rightPriceScale: {
+        borderColor: '#2a2e3d',
+        scaleMargins: { top: 0.1, bottom: 0.1 },
+      },
+      timeScale: {
+        borderColor: '#2a2e3d',
+        timeVisible: true,
+        fixLeftEdge: true,
+        fixRightEdge: true,
+        rightOffset: 2,
+        lockVisibleTimeRangeOnResize: true,
+      },
       crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
       handleScroll: true,
       handleScale: true,
@@ -1121,8 +1130,6 @@ function renderEquityChart(sortedTrades) {
       priceFormat: { type: 'price', precision: 2, minMove: 0.01 },
       title: 'P&L Total',
     });
-    const resizeObs = new ResizeObserver(() => equityChart.applyOptions({ width: container.clientWidth }));
-    resizeObs.observe(container);
   }
 
   if (sortedTrades.length === 0) {
