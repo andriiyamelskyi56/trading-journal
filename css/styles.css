@@ -297,7 +297,8 @@ a { color: var(--accent); text-decoration: none; }
 
 .equity-chart-container {
   width: 100%;
-  height: 220px;
+  height: 260px;
+  overflow: hidden;
 }
 
 .dashboard-charts {
