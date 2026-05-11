@@ -3214,6 +3214,79 @@ async function renderOpenPositions() {
 
 const openPnlCharts = {};
 
+const OPEN_PNL_VISIBLE_KEY = 'openPnlVisibleSymbols';
+let openPnlVisible = null; // Set<string> | null (null = first load, default to all)
+
+function loadOpenPnlVisible() {
+  if (openPnlVisible !== null) return openPnlVisible;
+  try {
+    const raw = localStorage.getItem(OPEN_PNL_VISIBLE_KEY);
+    openPnlVisible = raw ? new Set(JSON.parse(raw)) : null;
+  } catch { openPnlVisible = null; }
+  return openPnlVisible;
+}
+
+function saveOpenPnlVisible() {
+  if (!openPnlVisible) return;
+  try { localStorage.setItem(OPEN_PNL_VISIBLE_KEY, JSON.stringify([...openPnlVisible])); } catch {}
+}
+
+function isOpenPnlVisible(symbol) {
+  const sel = loadOpenPnlVisible();
+  if (!sel) return true; // default: show all on first ever load
+  return sel.has(symbol);
+}
+
+function applyOpenPnlVisibility() {
+  const container = document.getElementById('open-pnl-curves');
+  if (!container) return;
+  container.querySelectorAll('.open-pnl-curve-box').forEach(box => {
+    const sym = box.dataset.symbol;
+    box.style.display = isOpenPnlVisible(sym) ? '' : 'none';
+  });
+}
+
+function renderOpenPnlFilter(results) {
+  const wrap = document.getElementById('open-pnl-filter-wrap');
+  const chips = document.getElementById('open-pnl-filter-chips');
+  if (!wrap || !chips) return;
+
+  if (!results.length) { wrap.style.display = 'none'; return; }
+  wrap.style.display = '';
+
+  const symbols = [...new Set(results.map(r => r.pos.marketSymbol || r.pos.asset))];
+
+  chips.innerHTML = symbols.map(sym => {
+    const active = isOpenPnlVisible(sym);
+    return `<button type="button" class="open-pnl-chip${active ? ' active' : ''}" data-pnl-chip="${escapeHtml(sym)}">${escapeHtml(sym)}</button>`;
+  }).join('');
+
+  chips.querySelectorAll('[data-pnl-chip]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const sym = btn.dataset.pnlChip;
+      if (openPnlVisible === null) openPnlVisible = new Set(symbols);
+      if (openPnlVisible.has(sym)) openPnlVisible.delete(sym);
+      else openPnlVisible.add(sym);
+      saveOpenPnlVisible();
+      btn.classList.toggle('active');
+      applyOpenPnlVisibility();
+    });
+  });
+
+  document.getElementById('open-pnl-select-all').onclick = () => {
+    openPnlVisible = new Set(symbols);
+    saveOpenPnlVisible();
+    chips.querySelectorAll('[data-pnl-chip]').forEach(b => b.classList.add('active'));
+    applyOpenPnlVisibility();
+  };
+  document.getElementById('open-pnl-select-none').onclick = () => {
+    openPnlVisible = new Set();
+    saveOpenPnlVisible();
+    chips.querySelectorAll('[data-pnl-chip]').forEach(b => b.classList.remove('active'));
+    applyOpenPnlVisibility();
+  };
+}
+
 async function fetchHistoricalPrices(pos) {
   const symbol = pos.marketSymbol || pos.asset;
   const type = pos.marketType || 'stock';
@@ -3280,6 +3353,8 @@ async function renderOpenPnlCurves(results) {
   const container = document.getElementById('open-pnl-curves');
   container.innerHTML = '';
 
+  renderOpenPnlFilter(results);
+
   for (const { pos, unrealPnl } of results) {
     const symbol = pos.marketSymbol || pos.asset;
     const type = pos.marketType || 'stock';
@@ -3289,6 +3364,7 @@ async function renderOpenPnlCurves(results) {
 
     const box = document.createElement('div');
     box.className = 'open-pnl-curve-box';
+    box.dataset.symbol = symbol;
     const pnlCls = unrealPnl != null ? (unrealPnl >= 0 ? 'positive' : 'negative') : '';
     const pnlStr = unrealPnl != null ? (unrealPnl >= 0 ? '+' : '') + '$' + unrealPnl.toFixed(2) : '--';
     box.innerHTML = `
@@ -3354,6 +3430,8 @@ async function renderOpenPnlCurves(results) {
     const resizeObs = new ResizeObserver(() => chart.applyOptions({ width: chartEl.clientWidth }));
     resizeObs.observe(chartEl);
   }
+
+  applyOpenPnlVisibility();
 }
 
 document.getElementById('refresh-open-btn').addEventListener('click', renderOpenPositions);

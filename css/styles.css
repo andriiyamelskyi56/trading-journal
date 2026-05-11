@@ -376,11 +376,76 @@ a { color: var(--accent); text-decoration: none; }
   overflow-x: auto;
 }
 
+.open-pnl-filter-wrap {
+  margin-top: 20px;
+  padding: 12px 14px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.open-pnl-filter-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.open-pnl-filter-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.open-pnl-filter-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.open-pnl-filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.open-pnl-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.open-pnl-chip:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.open-pnl-chip.active {
+  color: #fff;
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
 .open-pnl-curves {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
   gap: 16px;
-  margin-top: 20px;
+  margin-top: 16px;
+}
+
+.open-pnl-curves:empty {
+  margin-top: 0;
 }
 
 .open-pnl-curve-box {
