@@ -2097,6 +2097,44 @@ body.chart-fullscreen-active { overflow: hidden; }
   #charts.chart-fullscreen .tv-chart-container { height: calc(100vh - 240px); }
 }
 
+/* ==================== STATS SUB-TABS ==================== */
+.stats-subtabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.stats-subtab {
+  padding: 10px 18px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.stats-subtab:hover {
+  color: var(--text);
+}
+
+.stats-subtab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.stats-subpanel {
+  display: none;
+}
+
+.stats-subpanel.active {
+  display: block;
+}
+
 /* ==================== MOCHILAS ==================== */
 .mochilas-tabs {
   display: flex;

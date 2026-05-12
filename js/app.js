@@ -390,6 +390,17 @@ async function deleteTradeFromDB(id) {
   await userTradesRef().doc(id).delete();
 }
 
+// ==================== STATS SUB-TABS ====================
+document.querySelectorAll('.stats-subtab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const target = btn.dataset.statsTab;
+    document.querySelectorAll('.stats-subtab').forEach(b => b.classList.toggle('active', b === btn));
+    document.querySelectorAll('.stats-subpanel').forEach(p => {
+      p.classList.toggle('active', p.dataset.statsPanel === target);
+    });
+  });
+});
+
 // ==================== NAVIGATION ====================
 document.querySelectorAll('.nav-links a').forEach(link => {
   link.addEventListener('click', (e) => {

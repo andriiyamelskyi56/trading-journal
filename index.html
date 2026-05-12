@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Trading Journal</title>
-  <link rel="stylesheet" href="css/styles.css?v=42">
+  <link rel="stylesheet" href="css/styles.css?v=43">
 </head>
 <body>
   <!-- PANTALLA DE AUTH -->
@@ -287,34 +287,6 @@
           <div id="equity-chart-container" class="equity-chart-container"></div>
         </div>
 
-        <!-- Gráficos bar -->
-        <div class="dashboard-charts">
-          <div class="chart-box">
-            <h3>P&L Mensual</h3>
-            <div id="monthly-chart" class="bar-chart"></div>
-          </div>
-          <div class="chart-box">
-            <h3>Rentabilidad por Activo</h3>
-            <div id="asset-chart" class="bar-chart"></div>
-          </div>
-          <div class="chart-box">
-            <h3>Rendimiento por Día</h3>
-            <div id="weekday-chart" class="bar-chart"></div>
-          </div>
-          <div class="chart-box">
-            <h3>Distribución de P&L</h3>
-            <div id="pnl-distribution-chart" class="bar-chart"></div>
-          </div>
-          <div class="chart-box">
-            <h3>Long vs Short</h3>
-            <div id="direction-chart" class="direction-chart"></div>
-          </div>
-          <div class="chart-box">
-            <h3>Rendimiento por Hora</h3>
-            <div id="hourly-chart" class="bar-chart"></div>
-          </div>
-        </div>
-
         <div class="dashboard-recent">
           <h3>Últimas Operaciones</h3>
           <table class="trades-table">
@@ -387,31 +359,70 @@
 
       <!-- ESTADÍSTICAS -->
       <section id="stats" class="section">
-        <h2>Estadísticas</h2>
-        <div class="stats-grid">
-          <div class="stat-box">
-            <h3>Mejores Activos (por P&L)</h3>
-            <div id="stats-best-assets" class="stat-list"></div>
+        <div class="section-header">
+          <h2>Estadísticas</h2>
+        </div>
+
+        <div class="stats-subtabs" role="tablist">
+          <button type="button" class="stats-subtab active" data-stats-tab="summary">Resumen</button>
+          <button type="button" class="stats-subtab" data-stats-tab="charts">Gráficos</button>
+        </div>
+
+        <div class="stats-subpanel active" data-stats-panel="summary">
+          <div class="stats-grid">
+            <div class="stat-box">
+              <h3>Mejores Activos (por P&L)</h3>
+              <div id="stats-best-assets" class="stat-list"></div>
+            </div>
+            <div class="stat-box">
+              <h3>Peores Activos (por P&L)</h3>
+              <div id="stats-worst-assets" class="stat-list"></div>
+            </div>
+            <div class="stat-box">
+              <h3>Win Rate por Activo</h3>
+              <div id="stats-winrate-asset" class="stat-list"></div>
+            </div>
+            <div class="stat-box">
+              <h3>P&L por Día de la Semana</h3>
+              <div id="stats-weekday-pnl" class="stat-list"></div>
+            </div>
+            <div class="stat-box">
+              <h3>Operaciones por Día de la Semana</h3>
+              <div id="stats-weekday-count" class="stat-list"></div>
+            </div>
+            <div class="stat-box">
+              <h3>Métricas Avanzadas</h3>
+              <div id="stats-advanced" class="stat-list"></div>
+            </div>
           </div>
-          <div class="stat-box">
-            <h3>Peores Activos (por P&L)</h3>
-            <div id="stats-worst-assets" class="stat-list"></div>
-          </div>
-          <div class="stat-box">
-            <h3>Win Rate por Activo</h3>
-            <div id="stats-winrate-asset" class="stat-list"></div>
-          </div>
-          <div class="stat-box">
-            <h3>P&L por Día de la Semana</h3>
-            <div id="stats-weekday-pnl" class="stat-list"></div>
-          </div>
-          <div class="stat-box">
-            <h3>Operaciones por Día de la Semana</h3>
-            <div id="stats-weekday-count" class="stat-list"></div>
-          </div>
-          <div class="stat-box">
-            <h3>Métricas Avanzadas</h3>
-            <div id="stats-advanced" class="stat-list"></div>
+        </div>
+
+        <div class="stats-subpanel" data-stats-panel="charts">
+          <div class="dashboard-charts">
+            <div class="chart-box">
+              <h3>P&L Mensual</h3>
+              <div id="monthly-chart" class="bar-chart"></div>
+            </div>
+            <div class="chart-box">
+              <h3>Rentabilidad por Activo</h3>
+              <div id="asset-chart" class="bar-chart"></div>
+            </div>
+            <div class="chart-box">
+              <h3>Rendimiento por Día</h3>
+              <div id="weekday-chart" class="bar-chart"></div>
+            </div>
+            <div class="chart-box">
+              <h3>Distribución de P&L</h3>
+              <div id="pnl-distribution-chart" class="bar-chart"></div>
+            </div>
+            <div class="chart-box">
+              <h3>Long vs Short</h3>
+              <div id="direction-chart" class="direction-chart"></div>
+            </div>
+            <div class="chart-box">
+              <h3>Rendimiento por Hora</h3>
+              <div id="hourly-chart" class="bar-chart"></div>
+            </div>
           </div>
         </div>
       </section>
@@ -842,6 +853,6 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
   <script src="js/firebase-config.js?v=30"></script>
-  <script src="js/app.js?v=42"></script>
+  <script src="js/app.js?v=43"></script>
 </body>
 </html>
