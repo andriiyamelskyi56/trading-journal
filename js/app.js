@@ -286,6 +286,7 @@ auth.onAuthStateChanged((user) => {
     showAuthView('welcome');
     if (unsubscribeTrades) { unsubscribeTrades(); unsubscribeTrades = null; }
     if (typeof unsubscribeWatchlists !== 'undefined' && unsubscribeWatchlists) { unsubscribeWatchlists(); unsubscribeWatchlists = null; }
+    if (typeof unsubscribeMochilas !== 'undefined' && unsubscribeMochilas) { unsubscribeMochilas(); unsubscribeMochilas = null; }
     if (typeof stopQuotesAutoRefresh === 'function') stopQuotesAutoRefresh();
   }
 });
@@ -300,6 +301,7 @@ function enterApp(user) {
 
   subscribeTrades();
   subscribeWatchlists();
+  subscribeMochilas();
   startQuotesAutoRefresh();
 }
 
@@ -3449,4 +3451,401 @@ function refreshAll() {
   if (document.getElementById('charts').classList.contains('active')) {
     populateChartSymbols();
   }
+  if (document.getElementById('mochilas').classList.contains('active')) {
+    renderMochilas();
+  }
 }
+
+// ==================== MOCHILAS ====================
+let mochilasCache = [];
+let activeMochilaId = null;
+let unsubscribeMochilas = null;
+let mochilaChart = null;
+let mochilaSeries = null;
+let mochilaCompareSeries = null;
+let mochilaCompareSymbol = null;
+
+function userMochilasRef() {
+  return db.collection('users').doc(currentUser.uid).collection('mochilas');
+}
+
+function subscribeMochilas() {
+  if (unsubscribeMochilas) unsubscribeMochilas();
+  unsubscribeMochilas = userMochilasRef().orderBy('createdAt').onSnapshot((snapshot) => {
+    mochilasCache = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    if (activeMochilaId && !mochilasCache.find(m => m.id === activeMochilaId)) {
+      activeMochilaId = mochilasCache[0]?.id || null;
+    }
+    if (!activeMochilaId && mochilasCache.length > 0) {
+      activeMochilaId = mochilasCache[0].id;
+    }
+    if (document.getElementById('mochilas').classList.contains('active')) {
+      renderMochilas();
+    }
+  });
+}
+
+function normSymbol(s) {
+  return (s || '').toString().toUpperCase().trim();
+}
+
+function computeMochilaPnl(mochila) {
+  const symbolSet = new Set((mochila.symbols || []).map(normSymbol));
+  const dailyPnl = {};
+  const perSymbolPnl = {};
+  let tradeCount = 0;
+  let wins = 0;
+  let losses = 0;
+
+  tradesCache.forEach(t => {
+    if (t.result === 'open') return;
+    const sym = normSymbol(t.marketSymbol || t.asset);
+    if (!symbolSet.has(sym)) return;
+    const pnl = t.pnl || 0;
+    dailyPnl[t.date] = (dailyPnl[t.date] || 0) + pnl;
+    perSymbolPnl[sym] = (perSymbolPnl[sym] || 0) + pnl;
+    tradeCount++;
+    if (pnl > 0) wins++;
+    else if (pnl < 0) losses++;
+  });
+
+  // Open positions: incremental daily P&L from historical cache + unrealized
+  const openPos = getOpenPositions().filter(p => symbolSet.has(normSymbol(p.marketSymbol || p.asset)));
+  openPos.forEach(pos => {
+    const sym = normSymbol(pos.marketSymbol || pos.asset);
+    const history = openHistoricalCache[pos.id];
+    if (history && history.length > 0) {
+      const qty = parseFloat(pos.quantity) || 1;
+      const dir = (pos.direction === 'long' || pos.direction === 'buy') ? 1 : -1;
+      let prevClose = parseFloat(pos.entry) || 0;
+      history.forEach(({ date, close }) => {
+        const dailyChange = (close - prevClose) * qty * dir;
+        dailyPnl[date] = (dailyPnl[date] || 0) + dailyChange;
+        prevClose = close;
+      });
+    }
+    const unreal = openPnlCache[pos.id]?.pnl;
+    if (unreal != null) perSymbolPnl[sym] = (perSymbolPnl[sym] || 0) + unreal;
+  });
+
+  const sortedDays = Object.keys(dailyPnl).sort();
+  let cum = 0;
+  const data = [];
+  sortedDays.forEach(d => {
+    cum += dailyPnl[d];
+    data.push({ time: d, value: parseFloat(cum.toFixed(2)) });
+  });
+
+  const totalPnl = data.length ? data[data.length - 1].value : 0;
+  const winRate = tradeCount > 0 ? (wins / (wins + losses || 1)) * 100 : null;
+
+  return {
+    data,
+    totalPnl,
+    tradeCount,
+    symbolCount: symbolSet.size,
+    perSymbolPnl,
+    winRate,
+    firstDate: sortedDays[0] || null,
+  };
+}
+
+function renderMochilas() {
+  const tabs = document.getElementById('mochilas-tabs');
+  const empty = document.getElementById('mochila-empty');
+  const detail = document.getElementById('mochila-detail');
+
+  if (!mochilasCache.length) {
+    tabs.innerHTML = '';
+    empty.style.display = '';
+    detail.style.display = 'none';
+    return;
+  }
+  empty.style.display = 'none';
+  detail.style.display = '';
+
+  tabs.innerHTML = mochilasCache.map(m => {
+    const count = (m.symbols || []).length;
+    const isActive = m.id === activeMochilaId;
+    return `<button class="mochila-tab${isActive ? ' active' : ''}" data-mochila-id="${m.id}">
+      ${escapeHtml(m.name)}
+      <span class="tab-count">${count}</span>
+    </button>`;
+  }).join('');
+
+  tabs.querySelectorAll('[data-mochila-id]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      activeMochilaId = btn.dataset.mochilaId;
+      mochilaCompareSymbol = null;
+      renderMochilas();
+    });
+  });
+
+  const active = mochilasCache.find(m => m.id === activeMochilaId);
+  if (!active) { detail.style.display = 'none'; return; }
+  renderMochilaDetail(active);
+}
+
+function renderMochilaDetail(mochila) {
+  const stats = computeMochilaPnl(mochila);
+
+  // Header stats
+  const totalEl = document.getElementById('mochila-total-pnl');
+  totalEl.textContent = (stats.totalPnl >= 0 ? '+' : '') + '$' + stats.totalPnl.toFixed(2);
+  totalEl.className = 'card-value ' + (stats.totalPnl >= 0 ? 'positive' : 'negative');
+  document.getElementById('mochila-trades-count').textContent = stats.tradeCount;
+  document.getElementById('mochila-symbols-count').textContent = stats.symbolCount;
+  const wr = document.getElementById('mochila-winrate');
+  wr.textContent = stats.winRate != null ? stats.winRate.toFixed(1) + '%' : '--';
+
+  // Symbol chips with per-symbol P&L
+  const chips = document.getElementById('mochila-symbols-chips');
+  chips.innerHTML = (mochila.symbols || []).map(sym => {
+    const pnl = stats.perSymbolPnl[normSymbol(sym)] || 0;
+    const cls = pnl >= 0 ? 'positive' : 'negative';
+    const pnlStr = pnl !== 0 ? `<span class="mochila-symbol-chip-pnl ${cls}">${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}</span>` : '';
+    return `<span class="mochila-symbol-chip">
+      ${escapeHtml(sym)}
+      ${pnlStr}
+      <button type="button" class="mochila-symbol-chip-remove" data-remove-sym="${escapeHtml(sym)}" title="Quitar">&times;</button>
+    </span>`;
+  }).join('');
+
+  chips.querySelectorAll('[data-remove-sym]').forEach(btn => {
+    btn.addEventListener('click', () => removeSymbolFromMochila(mochila.id, btn.dataset.removeSym));
+  });
+
+  renderMochilaChart(mochila, stats);
+}
+
+function renderMochilaChart(mochila, stats) {
+  const container = document.getElementById('mochila-chart');
+  if (!mochilaChart) {
+    mochilaChart = LightweightCharts.createChart(container, {
+      autoSize: true,
+      layout: { background: { color: '#1a1d27' }, textColor: '#8a8fa8' },
+      grid: { vertLines: { color: '#2a2e3d' }, horzLines: { color: '#2a2e3d' } },
+      rightPriceScale: { borderColor: '#2a2e3d', scaleMargins: { top: 0.1, bottom: 0.1 } },
+      leftPriceScale: { visible: false, borderColor: '#2a2e3d', scaleMargins: { top: 0.1, bottom: 0.1 } },
+      timeScale: {
+        borderColor: '#2a2e3d',
+        timeVisible: true,
+        fixLeftEdge: true,
+        fixRightEdge: true,
+        rightOffset: 2,
+        lockVisibleTimeRangeOnResize: true,
+      },
+      crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+    });
+    mochilaSeries = mochilaChart.addAreaSeries({
+      lineColor: '#6366f1',
+      topColor: '#6366f140',
+      bottomColor: '#6366f100',
+      lineWidth: 2,
+      priceFormat: { type: 'price', precision: 2, minMove: 0.01 },
+      title: 'P&L Mochila',
+      priceScaleId: 'right',
+    });
+  }
+
+  if (!stats.data.length) {
+    mochilaSeries.setData([]);
+  } else {
+    mochilaSeries.setData(stats.data);
+    const last = stats.data[stats.data.length - 1].value;
+    mochilaSeries.applyOptions({
+      lineColor: last >= 0 ? '#6366f1' : '#ef4444',
+      topColor: last >= 0 ? '#6366f140' : '#ef444430',
+    });
+  }
+  mochilaChart.timeScale().fitContent();
+
+  // Re-apply comparison if any
+  if (mochilaCompareSymbol) {
+    loadMochilaComparison(mochilaCompareSymbol, stats.firstDate);
+  } else if (mochilaCompareSeries) {
+    mochilaChart.removeSeries(mochilaCompareSeries);
+    mochilaCompareSeries = null;
+    mochilaChart.applyOptions({ leftPriceScale: { visible: false } });
+  }
+}
+
+async function fetchComparisonHistory(symbol, fromDate) {
+  if (!fromDate) {
+    // Default: last 6 months
+    const d = new Date();
+    d.setMonth(d.getMonth() - 6);
+    fromDate = d.toISOString().slice(0, 10);
+  }
+  const daysSince = Math.ceil((new Date() - new Date(fromDate + 'T12:00:00')) / 86400000);
+  let range = '1mo';
+  if (daysSince > 365) range = '5y';
+  else if (daysSince > 90) range = '1y';
+  else if (daysSince > 30) range = '6mo';
+
+  const proxies = [
+    url => `https://corsproxy.io/?${url}`,
+    url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+  ];
+  const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=${range}`;
+  for (const proxy of proxies) {
+    try {
+      const controller = new AbortController();
+      const tid = setTimeout(() => controller.abort(), 10000);
+      const res = await fetch(proxy(yahooUrl), { signal: controller.signal });
+      clearTimeout(tid);
+      if (!res.ok) continue;
+      const data = await res.json();
+      const result = data?.chart?.result?.[0];
+      if (!result) continue;
+      const timestamps = result.timestamp;
+      const closes = result.indicators?.quote?.[0]?.close;
+      if (!timestamps || !closes) continue;
+      const fromTs = Math.floor(new Date(fromDate + 'T00:00:00').getTime() / 1000);
+      const points = [];
+      for (let i = 0; i < timestamps.length; i++) {
+        if (timestamps[i] >= fromTs && closes[i] != null) {
+          const d = new Date(timestamps[i] * 1000);
+          const dow = d.getDay();
+          if (dow === 0 || dow === 6) continue;
+          const dateStr = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+          points.push({ time: dateStr, close: closes[i] });
+        }
+      }
+      return points;
+    } catch { /* try next */ }
+  }
+  return [];
+}
+
+async function loadMochilaComparison(symbol, fromDate) {
+  const points = await fetchComparisonHistory(symbol, fromDate);
+  if (!points.length) {
+    alert(`No se pudieron obtener datos para "${symbol}".`);
+    mochilaCompareSymbol = null;
+    document.getElementById('mochila-compare-clear').style.display = 'none';
+    return;
+  }
+  const basePrice = points[0].close;
+  const data = points.map(p => ({
+    time: p.time,
+    value: parseFloat((((p.close - basePrice) / basePrice) * 100).toFixed(2)),
+  }));
+
+  if (!mochilaCompareSeries) {
+    mochilaCompareSeries = mochilaChart.addLineSeries({
+      color: '#f59e0b',
+      lineWidth: 2,
+      priceFormat: { type: 'custom', formatter: v => v.toFixed(2) + '%' },
+      title: `${symbol} (%)`,
+      priceScaleId: 'left',
+    });
+  }
+  mochilaCompareSeries.applyOptions({ title: `${symbol} (%)` });
+  mochilaCompareSeries.setData(data);
+  mochilaChart.applyOptions({ leftPriceScale: { visible: true, borderColor: '#2a2e3d' } });
+  document.getElementById('mochila-compare-clear').style.display = '';
+}
+
+async function createMochila(name) {
+  await userMochilasRef().add({
+    name,
+    symbols: [],
+    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+  });
+}
+
+async function deleteMochila(id) {
+  if (!confirm('¿Eliminar esta mochila?')) return;
+  await userMochilasRef().doc(id).delete();
+}
+
+async function addSymbolToMochila(id, symbol) {
+  const sym = normSymbol(symbol);
+  if (!sym) return;
+  const mochila = mochilasCache.find(m => m.id === id);
+  if (!mochila) return;
+  const symbols = mochila.symbols || [];
+  if (symbols.map(normSymbol).includes(sym)) return; // already exists
+  await userMochilasRef().doc(id).update({
+    symbols: [...symbols, sym],
+  });
+}
+
+async function removeSymbolFromMochila(id, symbol) {
+  const sym = normSymbol(symbol);
+  const mochila = mochilasCache.find(m => m.id === id);
+  if (!mochila) return;
+  const symbols = (mochila.symbols || []).filter(s => normSymbol(s) !== sym);
+  await userMochilasRef().doc(id).update({ symbols });
+}
+
+// Event handlers for mochila UI
+document.getElementById('new-mochila-btn').addEventListener('click', () => {
+  document.getElementById('mochila-name-input').value = '';
+  document.getElementById('mochila-modal').classList.add('active');
+  setTimeout(() => document.getElementById('mochila-name-input').focus(), 50);
+});
+
+document.getElementById('mochila-modal-close').addEventListener('click', () => {
+  document.getElementById('mochila-modal').classList.remove('active');
+});
+document.getElementById('mochila-modal-cancel').addEventListener('click', () => {
+  document.getElementById('mochila-modal').classList.remove('active');
+});
+
+document.getElementById('mochila-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const name = document.getElementById('mochila-name-input').value.trim();
+  if (!name) return;
+  await createMochila(name);
+  document.getElementById('mochila-modal').classList.remove('active');
+});
+
+document.getElementById('delete-mochila-btn').addEventListener('click', () => {
+  if (activeMochilaId) deleteMochila(activeMochilaId);
+});
+
+document.getElementById('mochila-add-symbol-btn').addEventListener('click', () => {
+  const input = document.getElementById('mochila-add-symbol-input');
+  if (activeMochilaId && input.value.trim()) {
+    addSymbolToMochila(activeMochilaId, input.value);
+    input.value = '';
+  }
+});
+
+document.getElementById('mochila-add-symbol-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    document.getElementById('mochila-add-symbol-btn').click();
+  }
+});
+
+document.getElementById('mochila-compare-btn').addEventListener('click', async () => {
+  const input = document.getElementById('mochila-compare-input');
+  const sym = normSymbol(input.value);
+  if (!sym || !activeMochilaId) return;
+  const mochila = mochilasCache.find(m => m.id === activeMochilaId);
+  if (!mochila) return;
+  mochilaCompareSymbol = sym;
+  const stats = computeMochilaPnl(mochila);
+  await loadMochilaComparison(sym, stats.firstDate);
+});
+
+document.getElementById('mochila-compare-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    document.getElementById('mochila-compare-btn').click();
+  }
+});
+
+document.getElementById('mochila-compare-clear').addEventListener('click', () => {
+  mochilaCompareSymbol = null;
+  document.getElementById('mochila-compare-input').value = '';
+  if (mochilaCompareSeries && mochilaChart) {
+    mochilaChart.removeSeries(mochilaCompareSeries);
+    mochilaCompareSeries = null;
+    mochilaChart.applyOptions({ leftPriceScale: { visible: false } });
+  }
+  document.getElementById('mochila-compare-clear').style.display = 'none';
+});

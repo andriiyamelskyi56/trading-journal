@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Trading Journal</title>
-  <link rel="stylesheet" href="css/styles.css?v=41">
+  <link rel="stylesheet" href="css/styles.css?v=42">
 </head>
 <body>
   <!-- PANTALLA DE AUTH -->
@@ -152,6 +152,9 @@
         </a></li>
         <li><a href="#" data-section="charts">
           <span class="nav-icon">&#128201;</span> Gráficos
+        </a></li>
+        <li><a href="#" data-section="mochilas">
+          <span class="nav-icon">&#127890;</span> Mochilas
         </a></li>
       </ul>
       <div class="sidebar-footer">
@@ -567,7 +570,86 @@
           </div>
         </div>
       </section>
+
+      <!-- MOCHILAS -->
+      <section id="mochilas" class="section">
+        <div class="section-header">
+          <h2>Mochilas</h2>
+          <button class="btn btn-primary btn-sm" id="new-mochila-btn">+ Nueva Mochila</button>
+        </div>
+
+        <div class="mochilas-tabs" id="mochilas-tabs"></div>
+
+        <div id="mochila-empty" class="mochila-empty">
+          <p>Crea una mochila para agrupar instrumentos y ver su rendimiento conjunto.</p>
+        </div>
+
+        <div id="mochila-detail" style="display:none;">
+          <div class="mochila-stats">
+            <div class="card">
+              <div class="card-label">P&amp;L Total</div>
+              <div class="card-value" id="mochila-total-pnl">--</div>
+            </div>
+            <div class="card">
+              <div class="card-label">Trades</div>
+              <div class="card-value" id="mochila-trades-count">0</div>
+            </div>
+            <div class="card">
+              <div class="card-label">Símbolos</div>
+              <div class="card-value" id="mochila-symbols-count">0</div>
+            </div>
+            <div class="card">
+              <div class="card-label">Win Rate</div>
+              <div class="card-value" id="mochila-winrate">--</div>
+            </div>
+          </div>
+
+          <div class="mochila-symbols-section">
+            <div class="mochila-symbols-header">
+              <h4>Símbolos en esta mochila</h4>
+              <button class="btn btn-sm" id="delete-mochila-btn">&times; Eliminar mochila</button>
+            </div>
+            <div class="mochila-symbols-chips" id="mochila-symbols-chips"></div>
+            <div class="mochila-add-symbol">
+              <input type="text" id="mochila-add-symbol-input" placeholder="Añadir símbolo (ej. AAPL)" maxlength="20" autocomplete="off">
+              <button class="btn btn-sm" id="mochila-add-symbol-btn">Añadir</button>
+            </div>
+          </div>
+
+          <div class="mochila-chart-section chart-box">
+            <div class="mochila-chart-header">
+              <h3>Curva P&amp;L acumulado</h3>
+              <div class="mochila-compare">
+                <input type="text" id="mochila-compare-input" placeholder="Comparar con (ej. SPY)" maxlength="20" autocomplete="off">
+                <button class="btn btn-sm" id="mochila-compare-btn">Comparar</button>
+                <button class="btn btn-sm" id="mochila-compare-clear" style="display:none;">Quitar comparación</button>
+              </div>
+            </div>
+            <div class="mochila-chart-container" id="mochila-chart"></div>
+          </div>
+        </div>
+      </section>
     </main>
+  </div>
+
+  <!-- MODAL NUEVA MOCHILA -->
+  <div class="modal-overlay" id="mochila-modal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Nueva Mochila</h3>
+        <button class="modal-close" id="mochila-modal-close">&times;</button>
+      </div>
+      <form id="mochila-form">
+        <div class="form-group">
+          <label for="mochila-name-input">Nombre</label>
+          <input type="text" id="mochila-name-input" placeholder="Ej. Tech, Mis swing trades" maxlength="40" required>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn" id="mochila-modal-cancel">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Crear</button>
+        </div>
+      </form>
+    </div>
   </div>
 
   <!-- MODAL NUEVA LISTA -->
@@ -760,6 +842,6 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
   <script src="js/firebase-config.js?v=30"></script>
-  <script src="js/app.js?v=41"></script>
+  <script src="js/app.js?v=42"></script>
 </body>
 </html>
