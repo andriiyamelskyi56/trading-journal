@@ -287,6 +287,7 @@ auth.onAuthStateChanged((user) => {
     if (unsubscribeTrades) { unsubscribeTrades(); unsubscribeTrades = null; }
     if (typeof unsubscribeWatchlists !== 'undefined' && unsubscribeWatchlists) { unsubscribeWatchlists(); unsubscribeWatchlists = null; }
     if (typeof unsubscribeMochilas !== 'undefined' && unsubscribeMochilas) { unsubscribeMochilas(); unsubscribeMochilas = null; }
+    if (typeof stopLivePolling === 'function') stopLivePolling();
     if (typeof stopQuotesAutoRefresh === 'function') stopQuotesAutoRefresh();
   }
 });
@@ -303,6 +304,8 @@ function enterApp(user) {
   subscribeWatchlists();
   subscribeMochilas();
   startQuotesAutoRefresh();
+  // Kick off live price polling once we have an initial render of open positions
+  setTimeout(() => startLivePolling(), 2000);
 }
 
 // ==================== HELPERS AUTH ====================
@@ -414,6 +417,8 @@ document.querySelectorAll('.nav-links a').forEach(link => {
     refreshAll();
     if (section === 'markets' && activeWatchlistId) fetchQuotes();
     if (section === 'charts') populateChartSymbols();
+    if (section === 'dashboard' || section === 'mochilas') startLivePolling();
+    else stopLivePolling();
   });
 });
 
@@ -2231,6 +2236,29 @@ async function fetchSchwabQuote(symbol) {
   } catch { return null; }
 }
 
+// Batched Schwab quotes: one HTTP call for multiple symbols.
+// Returns { SYMBOL: { price, change, ... } }
+async function fetchSchwabQuotesBulk(symbols) {
+  if (!schwabConnected || !SCHWAB_WORKER_URL || !symbols.length) return {};
+  try {
+    const param = symbols.map(s => encodeURIComponent(s)).join(',');
+    const res = await fetch(`${SCHWAB_WORKER_URL}/api/quotes?symbols=${param}`);
+    if (!res.ok) return {};
+    const data = await res.json();
+    const out = {};
+    for (const sym of Object.keys(data)) {
+      const q = data[sym]?.quote;
+      if (!q) continue;
+      out[sym] = {
+        price: q.lastPrice,
+        change: q.netChange,
+        changePercent: q.netPercentChangeInDouble,
+      };
+    }
+    return out;
+  } catch { return {}; }
+}
+
 async function fetchSchwabPriceHistory(symbol, range) {
   if (!schwabConnected || !SCHWAB_WORKER_URL) return null;
   const params = getSchwabHistoryParams(range);
@@ -3189,14 +3217,14 @@ async function renderOpenPositions() {
     const pnlCls = unrealPnl != null ? (unrealPnl >= 0 ? 'positive' : 'negative') : '';
     const pctStr = pctChange != null ? (pctChange >= 0 ? '+' : '') + pctChange.toFixed(2) + '%' : '--';
     const symbol = pos.marketSymbol || pos.asset;
-    return `<tr>
+    return `<tr data-pos-id="${pos.id}">
       <td><strong>${escapeHtml(pos.asset)}</strong> <span class="badge" style="font-size:9px">${(t).toUpperCase()}</span></td>
       <td><span class="badge badge-${pos.direction}">${(pos.direction || '').toUpperCase()}</span></td>
       <td>${pos.quantity}</td>
       <td>${entryStr}</td>
-      <td class="${currentPrice != null ? (currentPrice >= pos.entry ? 'positive' : 'negative') : ''}">${priceStr}</td>
-      <td class="${pnlCls}" style="font-weight:700;">${pnlStr}</td>
-      <td class="${pnlCls}">${pctStr}</td>
+      <td data-cell="price" class="${currentPrice != null ? (currentPrice >= pos.entry ? 'positive' : 'negative') : ''}">${priceStr}</td>
+      <td data-cell="pnl" class="${pnlCls}" style="font-weight:700;">${pnlStr}</td>
+      <td data-cell="pct" class="${pnlCls}">${pctStr}</td>
       <td>${formatDate(pos.date)}</td>
       <td><button class="btn btn-sm" data-open-chart="${symbol}" data-open-type="${t}">&#128200;</button></td>
     </tr>`;
@@ -3859,4 +3887,135 @@ document.getElementById('mochila-compare-clear').addEventListener('click', () =>
     mochilaChart.applyOptions({ leftPriceScale: { visible: false } });
   }
   document.getElementById('mochila-compare-clear').style.display = 'none';
+});
+
+// ==================== LIVE PRICE POLLING ====================
+const LIVE_POLL_INTERVAL_MS = 5000;
+let livePollTimer = null;
+let livePollInFlight = false;
+
+async function refreshOpenPositionPricesLive() {
+  if (livePollInFlight) return;
+  const positions = getOpenPositions();
+  if (!positions.length) return;
+
+  livePollInFlight = true;
+  try {
+    // Bulk Schwab fetch for stock/forex symbols
+    const stockSymbols = [...new Set(positions
+      .filter(p => (p.marketType || 'stock') !== 'crypto')
+      .map(p => (p.marketSymbol || p.asset || '').toUpperCase())
+      .filter(Boolean))];
+    const schwabQuotes = schwabConnected ? await fetchSchwabQuotesBulk(stockSymbols) : {};
+
+    // Per-position price resolution (Schwab bulk -> Binance -> Yahoo fallback)
+    const priceMap = {};
+    await Promise.all(positions.map(async (pos) => {
+      const symbol = (pos.marketSymbol || pos.asset || '').toUpperCase();
+      const type = pos.marketType || 'stock';
+      if (type === 'crypto') {
+        try {
+          const r = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${encodeURIComponent(symbol)}`);
+          if (r.ok) { const d = await r.json(); priceMap[pos.id] = parseFloat(d.price); }
+        } catch {}
+      } else if (schwabQuotes[symbol]?.price != null) {
+        priceMap[pos.id] = schwabQuotes[symbol].price;
+      } else {
+        // Yahoo fallback (best-effort, ignored on failure)
+        try {
+          const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1d`;
+          const r = await fetch(`https://corsproxy.io/?${yahooUrl}`);
+          if (r.ok) {
+            const d = await r.json();
+            const p = d?.chart?.result?.[0]?.meta?.regularMarketPrice;
+            if (p) priceMap[pos.id] = p;
+          }
+        } catch {}
+      }
+    }));
+
+    // Update cache, table cells, and dependent views in place (no flicker)
+    let anyChange = false;
+    positions.forEach(pos => {
+      const price = priceMap[pos.id];
+      if (price == null) return;
+      const entry = pos.entry;
+      const qty = pos.quantity || 1;
+      const unrealPnl = (pos.direction === 'long')
+        ? (price - entry) * qty
+        : (entry - price) * qty;
+      const pctChange = ((price - entry) / entry) * 100 * (pos.direction === 'long' ? 1 : -1);
+      const prev = openPnlCache[pos.id]?.pnl;
+      if (prev !== unrealPnl) anyChange = true;
+      openPnlCache[pos.id] = { pnl: unrealPnl, currentPrice: price };
+      updatePositionRow(pos, price, unrealPnl, pctChange);
+    });
+
+    if (anyChange) {
+      renderDashboard();
+      if (document.getElementById('mochilas').classList.contains('active')) {
+        const active = mochilasCache.find(m => m.id === activeMochilaId);
+        if (active) renderMochilaDetail(active);
+      }
+    }
+  } finally {
+    livePollInFlight = false;
+  }
+}
+
+function updatePositionRow(pos, price, unrealPnl, pctChange) {
+  const tbody = document.getElementById('open-positions-body');
+  if (!tbody) return;
+  const row = tbody.querySelector(`tr[data-pos-id="${pos.id}"]`);
+  if (!row) return;
+  const t = pos.marketType || 'stock';
+  const priceStr = formatPrice(price, t);
+  const pnlStr = (unrealPnl >= 0 ? '+' : '') + '$' + unrealPnl.toFixed(2);
+  const pctStr = (pctChange >= 0 ? '+' : '') + pctChange.toFixed(2) + '%';
+  const pnlCls = unrealPnl >= 0 ? 'positive' : 'negative';
+
+  const priceCell = row.querySelector('[data-cell="price"]');
+  const pnlCell = row.querySelector('[data-cell="pnl"]');
+  const pctCell = row.querySelector('[data-cell="pct"]');
+  if (priceCell) {
+    priceCell.textContent = priceStr;
+    priceCell.className = price >= pos.entry ? 'positive' : 'negative';
+  }
+  if (pnlCell) {
+    pnlCell.textContent = pnlStr;
+    pnlCell.className = pnlCls;
+    pnlCell.style.fontWeight = '700';
+  }
+  if (pctCell) {
+    pctCell.textContent = pctStr;
+    pctCell.className = pnlCls;
+  }
+}
+
+function shouldPollLive() {
+  if (document.hidden) return false;
+  if (!currentUser) return false;
+  if (!getOpenPositions().length) return false;
+  const dashActive = document.getElementById('dashboard')?.classList.contains('active');
+  const mochActive = document.getElementById('mochilas')?.classList.contains('active');
+  return dashActive || mochActive;
+}
+
+function startLivePolling() {
+  stopLivePolling();
+  if (!shouldPollLive()) return;
+  livePollTimer = setInterval(() => {
+    if (shouldPollLive()) refreshOpenPositionPricesLive();
+  }, LIVE_POLL_INTERVAL_MS);
+  // Trigger one immediate refresh
+  refreshOpenPositionPricesLive();
+}
+
+function stopLivePolling() {
+  if (livePollTimer) { clearInterval(livePollTimer); livePollTimer = null; }
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) stopLivePolling();
+  else startLivePolling();
 });
