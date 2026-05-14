@@ -1819,6 +1819,7 @@ a { color: var(--accent); text-decoration: none; }
   transition: border-color 0.2s;
 }
 .schwab-status-bar:hover { border-color: var(--accent); }
+.sidebar-footer .schwab-status-bar { justify-content: center; }
 .schwab-dot {
   width: 8px; height: 8px; border-radius: 50%; display: inline-block;
 }
