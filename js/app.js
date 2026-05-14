@@ -2273,11 +2273,11 @@ function openIbkrModal() {
   document.getElementById('ibkr-query-input').value = ibkrConfig.queryId;
   document.getElementById('ibkr-disconnect-btn').style.display = ibkrConnected() ? '' : 'none';
   setIbkrMsg('', '');
-  document.getElementById('ibkr-modal').classList.add('active');
+  document.getElementById('ibkr-modal').classList.add('open');
 }
 
 function closeIbkrModal() {
-  document.getElementById('ibkr-modal').classList.remove('active');
+  document.getElementById('ibkr-modal').classList.remove('open');
 }
 
 function setIbkrMsg(msg, kind) {
@@ -4110,15 +4110,15 @@ async function removeSymbolFromMochila(id, symbol) {
 // Event handlers for mochila UI
 document.getElementById('new-mochila-btn').addEventListener('click', () => {
   document.getElementById('mochila-name-input').value = '';
-  document.getElementById('mochila-modal').classList.add('active');
+  document.getElementById('mochila-modal').classList.add('open');
   setTimeout(() => document.getElementById('mochila-name-input').focus(), 50);
 });
 
 document.getElementById('mochila-modal-close').addEventListener('click', () => {
-  document.getElementById('mochila-modal').classList.remove('active');
+  document.getElementById('mochila-modal').classList.remove('open');
 });
 document.getElementById('mochila-modal-cancel').addEventListener('click', () => {
-  document.getElementById('mochila-modal').classList.remove('active');
+  document.getElementById('mochila-modal').classList.remove('open');
 });
 
 document.getElementById('mochila-form').addEventListener('submit', async (e) => {
@@ -4126,7 +4126,7 @@ document.getElementById('mochila-form').addEventListener('submit', async (e) => 
   const name = document.getElementById('mochila-name-input').value.trim();
   if (!name) return;
   await createMochila(name);
-  document.getElementById('mochila-modal').classList.remove('active');
+  document.getElementById('mochila-modal').classList.remove('open');
 });
 
 document.getElementById('delete-mochila-btn').addEventListener('click', () => {
