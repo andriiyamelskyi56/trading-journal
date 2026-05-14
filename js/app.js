@@ -2190,18 +2190,50 @@ async function checkSchwabStatus() {
 }
 
 function updateSchwabIndicator() {
-  const el = document.getElementById('schwab-status');
-  if (!el) return;
-  if (!SCHWAB_WORKER_URL) {
-    el.innerHTML = '<span class="schwab-dot schwab-off"></span> No configurado';
-    el.onclick = promptSchwabSetup;
-  } else if (schwabConnected) {
-    el.innerHTML = '<span class="schwab-dot schwab-on"></span> Schwab conectado';
-    el.onclick = null;
-  } else {
-    el.innerHTML = '<span class="schwab-dot schwab-off"></span> Conectar Schwab';
-    el.onclick = () => window.open(SCHWAB_WORKER_URL + '/login', '_blank');
-  }
+  const els = document.querySelectorAll('.schwab-status-bar');
+  els.forEach(el => {
+    if (!SCHWAB_WORKER_URL) {
+      el.innerHTML = '<span class="schwab-dot schwab-off"></span> Configurar broker';
+      el.onclick = promptSchwabSetup;
+    } else if (schwabConnected) {
+      el.innerHTML = '<span class="schwab-dot schwab-on"></span> Broker conectado';
+      el.onclick = null;
+    } else {
+      el.innerHTML = '<span class="schwab-dot schwab-off"></span> Conectar broker';
+      el.onclick = startSchwabConnect;
+    }
+  });
+}
+
+// Opens the Schwab OAuth login in a popup and polls /status until the
+// connection completes, then updates the UI automatically.
+let schwabConnectPoll = null;
+function startSchwabConnect() {
+  if (!SCHWAB_WORKER_URL) { promptSchwabSetup(); return; }
+  const popup = window.open(SCHWAB_WORKER_URL + '/login', 'schwab-login', 'width=520,height=720');
+  if (schwabConnectPoll) clearInterval(schwabConnectPoll);
+  let elapsed = 0;
+  schwabConnectPoll = setInterval(async () => {
+    elapsed += 2;
+    await checkSchwabStatus();
+    if (schwabConnected) {
+      clearInterval(schwabConnectPoll);
+      schwabConnectPoll = null;
+      try { popup && popup.close(); } catch {}
+      refreshAll();
+      startLivePolling();
+    } else if (elapsed >= 180 || (popup && popup.closed)) {
+      // Give up after 3 min, or shortly after the popup is closed
+      if (popup && popup.closed) {
+        // One last check in case the callback just landed
+        await checkSchwabStatus();
+      }
+      if (!schwabConnected && (elapsed >= 180 || (popup && popup.closed))) {
+        clearInterval(schwabConnectPoll);
+        schwabConnectPoll = null;
+      }
+    }
+  }, 2000);
 }
 
 function promptSchwabSetup() {
