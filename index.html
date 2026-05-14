@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Trading Journal</title>
-  <link rel="stylesheet" href="css/styles.css?v=45">
+  <link rel="stylesheet" href="css/styles.css?v=46">
 </head>
 <body>
   <!-- PANTALLA DE AUTH -->
@@ -160,6 +160,9 @@
       <div class="sidebar-footer">
         <div class="schwab-status-bar" id="schwab-status-sidebar">
           <span class="schwab-dot schwab-off"></span> Cargando...
+        </div>
+        <div class="schwab-status-bar" id="ibkr-status-sidebar">
+          <span class="schwab-dot schwab-off"></span> Conectar IBKR
         </div>
         <span id="user-email" class="user-email"></span>
         <button class="btn btn-sm" id="logout-btn">Salir</button>
@@ -646,6 +649,41 @@
     </main>
   </div>
 
+  <!-- MODAL CONECTAR IBKR -->
+  <div class="modal-overlay" id="ibkr-modal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Conectar Interactive Brokers</h3>
+        <button class="modal-close" id="ibkr-modal-close">&times;</button>
+      </div>
+      <div class="ibkr-modal-body">
+        <p class="ibkr-help">
+          IBKR no usa contraseña en apps externas. Se conecta con un
+          <strong>token de solo lectura</strong> del Flex Web Service.
+          En IBKR: <em>Account Management → Settings → Flex Web Service</em>
+          (actívalo) y crea un <em>Flex Query</em> con las secciones
+          <strong>Trades</strong> y <strong>Open Positions</strong>.
+        </p>
+        <form id="ibkr-form">
+          <div class="form-group">
+            <label for="ibkr-token-input">Token Flex Web Service</label>
+            <input type="text" id="ibkr-token-input" placeholder="Ej. 123456789012345678901234" autocomplete="off" required>
+          </div>
+          <div class="form-group">
+            <label for="ibkr-query-input">Flex Query ID</label>
+            <input type="text" id="ibkr-query-input" placeholder="Ej. 987654" autocomplete="off" required>
+          </div>
+          <p id="ibkr-status-msg" class="ibkr-status-msg"></p>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-delete" id="ibkr-disconnect-btn" style="display:none;">Desconectar</button>
+            <button type="button" class="btn" id="ibkr-modal-cancel">Cancelar</button>
+            <button type="submit" class="btn btn-primary" id="ibkr-sync-btn">Guardar y sincronizar</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
   <!-- MODAL NUEVA MOCHILA -->
   <div class="modal-overlay" id="mochila-modal">
     <div class="modal">
@@ -856,6 +894,6 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
   <script src="js/firebase-config.js?v=30"></script>
-  <script src="js/app.js?v=45"></script>
+  <script src="js/app.js?v=46"></script>
 </body>
 </html>

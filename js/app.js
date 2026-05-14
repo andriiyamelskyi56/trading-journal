@@ -304,6 +304,7 @@ function enterApp(user) {
   subscribeWatchlists();
   subscribeMochilas();
   startQuotesAutoRefresh();
+  updateIbkrIndicator();
   // Kick off live price polling once we have an initial render of open positions
   setTimeout(() => startLivePolling(), 2000);
 }
@@ -2243,6 +2244,261 @@ function promptSchwabSetup() {
     location.reload();
   }
 }
+
+// ==================== IBKR (FLEX WEB SERVICE) ====================
+// IBKR is read-only: a Flex token + query id fetch XML reports of trades and
+// positions. No password ever touches the app. Config lives in localStorage.
+let ibkrConfig = {
+  token: localStorage.getItem('ibkr_flex_token') || '',
+  queryId: localStorage.getItem('ibkr_flex_query') || '',
+};
+
+function ibkrConnected() {
+  return !!(ibkrConfig.token && ibkrConfig.queryId);
+}
+
+function updateIbkrIndicator() {
+  const el = document.getElementById('ibkr-status-sidebar');
+  if (!el) return;
+  if (ibkrConnected()) {
+    el.innerHTML = '<span class="schwab-dot schwab-on"></span> IBKR conectado';
+  } else {
+    el.innerHTML = '<span class="schwab-dot schwab-off"></span> Conectar IBKR';
+  }
+  el.onclick = openIbkrModal;
+}
+
+function openIbkrModal() {
+  document.getElementById('ibkr-token-input').value = ibkrConfig.token;
+  document.getElementById('ibkr-query-input').value = ibkrConfig.queryId;
+  document.getElementById('ibkr-disconnect-btn').style.display = ibkrConnected() ? '' : 'none';
+  setIbkrMsg('', '');
+  document.getElementById('ibkr-modal').classList.add('active');
+}
+
+function closeIbkrModal() {
+  document.getElementById('ibkr-modal').classList.remove('active');
+}
+
+function setIbkrMsg(msg, kind) {
+  const el = document.getElementById('ibkr-status-msg');
+  if (!el) return;
+  el.textContent = msg;
+  el.className = 'ibkr-status-msg' + (kind ? ' ' + kind : '');
+}
+
+function ibkrXmlError(doc) {
+  // Flex service returns <Status>Fail</Status> with an ErrorMessage on errors
+  const status = doc.querySelector('Status')?.textContent;
+  if (status && status !== 'Success') {
+    const errMsg = doc.querySelector('ErrorMessage')?.textContent;
+    const errCode = doc.querySelector('ErrorCode')?.textContent;
+    return { status, message: errMsg || 'Error desconocido', code: errCode };
+  }
+  return null;
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+async function ibkrSendRequest() {
+  if (!SCHWAB_WORKER_URL) throw new Error('Worker no configurado');
+  const res = await fetch(`${SCHWAB_WORKER_URL}/ibkr/send?t=${encodeURIComponent(ibkrConfig.token)}&q=${encodeURIComponent(ibkrConfig.queryId)}`);
+  const text = await res.text();
+  const doc = new DOMParser().parseFromString(text, 'application/xml');
+  const err = ibkrXmlError(doc);
+  if (err) throw new Error(`IBKR: ${err.message}${err.code ? ' (' + err.code + ')' : ''}`);
+  const refCode = doc.querySelector('ReferenceCode')?.textContent;
+  if (!refCode) throw new Error('IBKR no devolvió un código de referencia');
+  return refCode;
+}
+
+async function ibkrGetStatement(refCode) {
+  // The report may not be ready immediately; retry a few times.
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const res = await fetch(`${SCHWAB_WORKER_URL}/ibkr/get?t=${encodeURIComponent(ibkrConfig.token)}&q=${encodeURIComponent(refCode)}`);
+    const text = await res.text();
+    const doc = new DOMParser().parseFromString(text, 'application/xml');
+    const err = ibkrXmlError(doc);
+    if (err) {
+      // Code 1019 = statement generation in progress
+      if (err.code === '1019' || /progress/i.test(err.message)) {
+        await sleep(3000);
+        continue;
+      }
+      throw new Error(`IBKR: ${err.message}${err.code ? ' (' + err.code + ')' : ''}`);
+    }
+    return doc;
+  }
+  throw new Error('IBKR: el informe tardó demasiado en generarse');
+}
+
+function ibkrAssetType(category) {
+  const c = (category || '').toUpperCase();
+  if (c === 'CASH' || c === 'FX') return 'forex';
+  if (c === 'CRYPTO') return 'crypto';
+  return 'stock';
+}
+
+function ibkrDate(raw) {
+  // IBKR dates: "20240115" or "20240115;093000" or "2024-01-15"
+  if (!raw) return new Date().toISOString().slice(0, 10);
+  const d = raw.split(/[;,\s]/)[0].replace(/-/g, '');
+  if (d.length >= 8) return `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}`;
+  return raw.slice(0, 10);
+}
+
+// Convert the Flex report XML into journal trade objects.
+function parseIbkrReport(doc) {
+  const out = [];
+
+  // Closed/realized trades: <Trade> rows with realized P&L
+  doc.querySelectorAll('Trade').forEach(el => {
+    const get = (a) => el.getAttribute(a);
+    const symbol = get('symbol');
+    if (!symbol) return;
+    const ibId = get('tradeID') || get('transactionID') || get('ibOrderID');
+    const buySell = (get('buySell') || '').toUpperCase();
+    const qty = Math.abs(parseFloat(get('quantity')) || 0);
+    const price = parseFloat(get('tradePrice')) || 0;
+    const commission = parseFloat(get('ibCommission')) || 0;
+    const realized = get('fifoPnlRealized') != null
+      ? parseFloat(get('fifoPnlRealized'))
+      : (parseFloat(get('realizedPnl')) || 0);
+    const pnl = Math.round((realized + commission) * 100) / 100;
+    const isClosing = realized !== 0;
+
+    out.push({
+      ibkrId: ibId ? 'ibkr-' + ibId : null,
+      date: ibkrDate(get('tradeDate') || get('dateTime')),
+      asset: symbol.toUpperCase(),
+      marketSymbol: symbol.toUpperCase(),
+      marketType: ibkrAssetType(get('assetCategory')),
+      direction: buySell === 'SELL' ? 'short' : 'long',
+      quantity: qty,
+      entry: price,
+      exit: null,
+      sl: null,
+      tp: null,
+      pnl: isClosing ? pnl : 0,
+      result: isClosing ? (pnl >= 0 ? 'win' : 'loss') : 'open',
+      notesPre: '',
+      notesPost: 'Importado de IBKR',
+      notes: 'Importado de IBKR',
+      screenshotsPre: [],
+      screenshotsPost: [],
+      source: 'ibkr',
+    });
+  });
+
+  // Open positions: <OpenPosition> rows
+  doc.querySelectorAll('OpenPosition').forEach(el => {
+    const get = (a) => el.getAttribute(a);
+    const symbol = get('symbol');
+    if (!symbol) return;
+    const position = parseFloat(get('position')) || 0;
+    if (position === 0) return;
+    const ibId = 'ibkr-pos-' + symbol.toUpperCase();
+    out.push({
+      ibkrId: ibId,
+      date: ibkrDate(get('openDateTime') || get('reportDate')),
+      asset: symbol.toUpperCase(),
+      marketSymbol: symbol.toUpperCase(),
+      marketType: ibkrAssetType(get('assetCategory')),
+      direction: position >= 0 ? 'long' : 'short',
+      quantity: Math.abs(position),
+      entry: parseFloat(get('costBasisPrice')) || parseFloat(get('openPrice')) || 0,
+      exit: null,
+      sl: null,
+      tp: null,
+      pnl: 0,
+      result: 'open',
+      notesPre: '',
+      notesPost: 'Posición abierta importada de IBKR',
+      notes: 'Posición abierta importada de IBKR',
+      screenshotsPre: [],
+      screenshotsPost: [],
+      source: 'ibkr',
+    });
+  });
+
+  return out;
+}
+
+async function syncIbkr() {
+  if (!ibkrConnected()) { setIbkrMsg('Falta token o Query ID', 'error'); return; }
+  const btn = document.getElementById('ibkr-sync-btn');
+  btn.disabled = true;
+  try {
+    setIbkrMsg('Solicitando informe a IBKR...', 'working');
+    const refCode = await ibkrSendRequest();
+    setIbkrMsg('Generando informe (puede tardar unos segundos)...', 'working');
+    const doc = await ibkrGetStatement(refCode);
+
+    const parsed = parseIbkrReport(doc);
+    if (!parsed.length) {
+      setIbkrMsg('El informe no contiene trades ni posiciones. Revisa que el Flex Query incluya las secciones Trades y Open Positions.', 'error');
+      return;
+    }
+
+    // Dedup against trades already imported from IBKR
+    const existingIds = new Set(
+      tradesCache.map(t => t.ibkrId).filter(Boolean)
+    );
+    const toImport = parsed.filter(t => t.ibkrId && !existingIds.has(t.ibkrId));
+    const skipped = parsed.length - toImport.length;
+
+    if (!toImport.length) {
+      setIbkrMsg(`Todo al día — ${skipped} registro(s) ya importados, nada nuevo.`, 'success');
+      return;
+    }
+
+    setIbkrMsg(`Importando ${toImport.length} registro(s)...`, 'working');
+    let saved = 0;
+    for (const trade of toImport) {
+      const dataToSave = { ...trade };
+      dataToSave.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+      dataToSave.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
+      await userTradesRef().add(dataToSave);
+      saved++;
+    }
+    setIbkrMsg(`✓ ${saved} importados${skipped ? `, ${skipped} ya existían` : ''}.`, 'success');
+  } catch (err) {
+    setIbkrMsg(err.message || 'Error al sincronizar con IBKR', 'error');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// IBKR modal wiring
+document.getElementById('ibkr-modal-close').addEventListener('click', closeIbkrModal);
+document.getElementById('ibkr-modal-cancel').addEventListener('click', closeIbkrModal);
+document.getElementById('ibkr-modal').addEventListener('click', (e) => {
+  if (e.target.id === 'ibkr-modal') closeIbkrModal();
+});
+
+document.getElementById('ibkr-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const token = document.getElementById('ibkr-token-input').value.trim();
+  const queryId = document.getElementById('ibkr-query-input').value.trim();
+  if (!token || !queryId) { setIbkrMsg('Rellena token y Query ID', 'error'); return; }
+  ibkrConfig = { token, queryId };
+  localStorage.setItem('ibkr_flex_token', token);
+  localStorage.setItem('ibkr_flex_query', queryId);
+  updateIbkrIndicator();
+  document.getElementById('ibkr-disconnect-btn').style.display = '';
+  await syncIbkr();
+});
+
+document.getElementById('ibkr-disconnect-btn').addEventListener('click', () => {
+  ibkrConfig = { token: '', queryId: '' };
+  localStorage.removeItem('ibkr_flex_token');
+  localStorage.removeItem('ibkr_flex_query');
+  document.getElementById('ibkr-token-input').value = '';
+  document.getElementById('ibkr-query-input').value = '';
+  document.getElementById('ibkr-disconnect-btn').style.display = 'none';
+  updateIbkrIndicator();
+  setIbkrMsg('IBKR desconectado.', 'success');
+});
 
 async function fetchSchwabQuote(symbol) {
   if (!schwabConnected || !SCHWAB_WORKER_URL) return null;

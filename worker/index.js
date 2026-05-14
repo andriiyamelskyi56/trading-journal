@@ -125,6 +125,29 @@ async function handleStatus(env, origin) {
   return jsonResponse({ connected: true, accessValid, refreshValid }, 200, origin);
 }
 
+// IBKR Flex Web Service proxy. The user's read-only Flex token + query id
+// are passed as query params; nothing is stored worker-side.
+async function handleIbkrFlex(url, env, origin) {
+  const action = url.pathname === '/ibkr/send' ? 'SendRequest' : 'GetStatement';
+  const t = url.searchParams.get('t');
+  const q = url.searchParams.get('q');
+  if (!t || !q) {
+    return jsonResponse({ error: 'Missing token (t) or query (q)' }, 400, origin);
+  }
+  const ibkrUrl = `https://gdcdyn.interactivebrokers.com/Universal/servlet/FlexStatementService.${action}` +
+    `?t=${encodeURIComponent(t)}&q=${encodeURIComponent(q)}&v=3`;
+  try {
+    const res = await fetch(ibkrUrl);
+    const data = await res.text();
+    return new Response(data, {
+      status: res.status,
+      headers: { 'Content-Type': 'application/xml', ...corsHeaders(origin) },
+    });
+  } catch (err) {
+    return jsonResponse({ error: 'IBKR Flex error: ' + err.message }, 502, origin);
+  }
+}
+
 async function handleApiProxy(url, env, origin) {
   const token = await getValidAccessToken(env);
   if (!token) {
@@ -169,6 +192,9 @@ export default {
           return handleCallback(url, env);
         case '/status':
           return handleStatus(env, origin);
+        case '/ibkr/send':
+        case '/ibkr/get':
+          return handleIbkrFlex(url, env, origin);
         default:
           if (url.pathname.startsWith('/api/')) {
             return handleApiProxy(url, env, origin);
