@@ -1820,6 +1820,27 @@ a { color: var(--accent); text-decoration: none; }
 }
 .schwab-status-bar:hover { border-color: var(--accent); }
 .sidebar-footer .schwab-status-bar { justify-content: center; }
+
+/* ==================== IBKR MODAL ==================== */
+.ibkr-modal-body { padding: 4px 0; }
+.ibkr-help {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+  margin-bottom: 16px;
+}
+.ibkr-status-msg {
+  font-size: 12px;
+  margin: 4px 0 12px;
+  min-height: 16px;
+}
+.ibkr-status-msg.error { color: var(--red); }
+.ibkr-status-msg.success { color: var(--green); }
+.ibkr-status-msg.working { color: var(--text-muted); }
 .schwab-dot {
   width: 8px; height: 8px; border-radius: 50%; display: inline-block;
 }
