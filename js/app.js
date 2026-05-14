@@ -2191,7 +2191,7 @@ async function checkSchwabStatus() {
 }
 
 function updateSchwabIndicator() {
-  const els = document.querySelectorAll('.schwab-status-bar');
+  const els = document.querySelectorAll('.schwab-status-bar:not(#ibkr-status-sidebar)');
   els.forEach(el => {
     if (!SCHWAB_WORKER_URL) {
       el.innerHTML = '<span class="schwab-dot schwab-off"></span> Configurar broker';
