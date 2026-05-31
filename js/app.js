@@ -2248,30 +2248,77 @@ function promptSchwabSetup() {
 // ==================== IBKR (FLEX WEB SERVICE) ====================
 // IBKR is read-only: a Flex token + query id fetch XML reports of trades and
 // positions. No password ever touches the app. Config lives in localStorage.
+// The parser is TraderSync-style: groups executions by order, pairs opens with
+// closes into round-trips, and understands stocks, forex, crypto, futures and
+// options (with strike/expiry/put-call/multiplier).
 let ibkrConfig = {
   token: localStorage.getItem('ibkr_flex_token') || '',
   queryId: localStorage.getItem('ibkr_flex_query') || '',
+  lastSync: localStorage.getItem('ibkr_last_sync') || '',
+  account: (() => {
+    try { return JSON.parse(localStorage.getItem('ibkr_account') || 'null'); }
+    catch { return null; }
+  })(),
 };
 
 function ibkrConnected() {
   return !!(ibkrConfig.token && ibkrConfig.queryId);
 }
 
+function ibkrAccountLabel() {
+  const a = ibkrConfig.account;
+  if (!a) return 'IBKR conectado';
+  const id = a.alias || a.accountId || '';
+  const cur = a.currency ? ` · ${a.currency}` : '';
+  return id ? `IBKR ${id}${cur}` : 'IBKR conectado';
+}
+
 function updateIbkrIndicator() {
   const el = document.getElementById('ibkr-status-sidebar');
   if (!el) return;
   if (ibkrConnected()) {
-    el.innerHTML = '<span class="schwab-dot schwab-on"></span> IBKR conectado';
+    el.innerHTML = `<span class="schwab-dot schwab-on"></span> ${ibkrAccountLabel()}`;
   } else {
     el.innerHTML = '<span class="schwab-dot schwab-off"></span> Conectar IBKR';
   }
   el.onclick = openIbkrModal;
 }
 
+function renderIbkrAccountBox() {
+  const box = document.getElementById('ibkr-account-box');
+  if (!box) return;
+  const a = ibkrConfig.account;
+  if (!a) { box.style.display = 'none'; box.innerHTML = ''; return; }
+  const rows = [
+    ['Cuenta', a.accountId || '—'],
+    a.alias ? ['Alias', a.alias] : null,
+    a.name ? ['Titular', a.name] : null,
+    a.accountType ? ['Tipo', a.accountType] : null,
+    a.currency ? ['Divisa base', a.currency] : null,
+    a.period ? ['Período del informe', a.period] : null,
+    a.fromDate && a.toDate ? ['Rango', `${a.fromDate} → ${a.toDate}`] : null,
+    a.whenGenerated ? ['Generado', a.whenGenerated] : null,
+  ].filter(Boolean);
+  box.innerHTML = '<div class="ibkr-account-title">Cuenta conectada</div>' +
+    rows.map(([k, v]) => `<div class="ibkr-account-row"><span>${k}</span><strong>${v}</strong></div>`).join('');
+  box.style.display = '';
+}
+
 function openIbkrModal() {
   document.getElementById('ibkr-token-input').value = ibkrConfig.token;
   document.getElementById('ibkr-query-input').value = ibkrConfig.queryId;
   document.getElementById('ibkr-disconnect-btn').style.display = ibkrConnected() ? '' : 'none';
+  const lastEl = document.getElementById('ibkr-last-sync');
+  if (lastEl) {
+    if (ibkrConfig.lastSync) {
+      const d = new Date(ibkrConfig.lastSync);
+      lastEl.textContent = `Última sincronización: ${d.toLocaleString()}`;
+      lastEl.style.display = '';
+    } else {
+      lastEl.style.display = 'none';
+    }
+  }
+  renderIbkrAccountBox();
   setIbkrMsg('', '');
   document.getElementById('ibkr-modal').classList.add('open');
 }
@@ -2334,9 +2381,21 @@ async function ibkrGetStatement(refCode) {
 
 function ibkrAssetType(category) {
   const c = (category || '').toUpperCase();
+  if (c === 'OPT' || c === 'FOP') return 'option';
+  if (c === 'FUT') return 'future';
   if (c === 'CASH' || c === 'FX') return 'forex';
   if (c === 'CRYPTO') return 'crypto';
   return 'stock';
+}
+
+// Default contract multiplier when IBKR omits it (US equity options = 100,
+// stocks = 1). Futures vary so we trust the report value.
+function ibkrMultiplier(category, raw) {
+  const m = parseFloat(raw);
+  if (m > 0) return m;
+  const c = (category || '').toUpperCase();
+  if (c === 'OPT' || c === 'FOP') return 100;
+  return 1;
 }
 
 function ibkrDate(raw) {
@@ -2347,64 +2406,226 @@ function ibkrDate(raw) {
   return raw.slice(0, 10);
 }
 
+// Build a readable symbol for options: "AAPL 2024-01-19 C190".
+function ibkrDisplaySymbol(get) {
+  const underlying = (get('underlyingSymbol') || get('symbol') || '').toUpperCase();
+  const cat = (get('assetCategory') || '').toUpperCase();
+  if (cat !== 'OPT' && cat !== 'FOP') return underlying;
+  const expiry = ibkrDate(get('expiry') || get('reportDate'));
+  const strike = get('strike');
+  const pc = (get('putCall') || '').toUpperCase().charAt(0);
+  return `${underlying} ${expiry} ${pc}${strike}`.trim();
+}
+
+// Extract account/statement metadata from the Flex report.
+function parseIbkrAccountInfo(doc) {
+  const info = doc.querySelector('AccountInformation');
+  const stmt = doc.querySelector('FlexStatement');
+  const get = (el, a) => (el && el.getAttribute(a)) || '';
+  const accountId = get(info, 'accountId') || get(stmt, 'accountId') || '';
+  if (!accountId) return null;
+  return {
+    accountId,
+    alias: get(info, 'acctAlias'),
+    name: get(info, 'name'),
+    accountType: get(info, 'accountType'),
+    currency: get(info, 'currency'),
+    period: get(stmt, 'period'),
+    fromDate: ibkrDate(get(stmt, 'fromDate')),
+    toDate: ibkrDate(get(stmt, 'toDate')),
+    whenGenerated: get(stmt, 'whenGenerated'),
+  };
+}
+
 // Convert the Flex report XML into journal trade objects.
+// Strategy:
+//   1. Group every <Trade> row by ibOrderID (or tradeID as fallback). Each
+//      order becomes one execution entry with weighted-avg price, summed qty
+//      and summed commission.
+//   2. Walk the executions in chronological order and use openCloseIndicator
+//      (O/C) to pair openings with closings into journal round-trips. When the
+//      report only carries openings (open positions) they're emitted as
+//      'open' trades.
+//   3. <OpenPosition> rows that don't match any opening execution in the
+//      report are added so the journal reflects everything currently held.
 function parseIbkrReport(doc) {
   const out = [];
 
-  // Closed/realized trades: <Trade> rows with realized P&L
+  // ---- 1. Group <Trade> rows into executions ----
+  const execMap = new Map(); // key -> execution
   doc.querySelectorAll('Trade').forEach(el => {
     const get = (a) => el.getAttribute(a);
     const symbol = get('symbol');
     if (!symbol) return;
-    const ibId = get('tradeID') || get('transactionID') || get('ibOrderID');
-    const buySell = (get('buySell') || '').toUpperCase();
-    const qty = Math.abs(parseFloat(get('quantity')) || 0);
+
+    const orderKey = get('ibOrderID') || get('tradeID') || get('transactionID');
+    if (!orderKey) return;
+    const conid = get('conid') || symbol;
+    const key = `${orderKey}|${conid}`;
+
+    const qty = parseFloat(get('quantity')) || 0;
+    const absQty = Math.abs(qty);
     const price = parseFloat(get('tradePrice')) || 0;
     const commission = parseFloat(get('ibCommission')) || 0;
     const realized = get('fifoPnlRealized') != null
-      ? parseFloat(get('fifoPnlRealized'))
+      ? (parseFloat(get('fifoPnlRealized')) || 0)
       : (parseFloat(get('realizedPnl')) || 0);
-    const pnl = Math.round((realized + commission) * 100) / 100;
-    const isClosing = realized !== 0;
 
-    out.push({
-      ibkrId: ibId ? 'ibkr-' + ibId : null,
-      date: ibkrDate(get('tradeDate') || get('dateTime')),
-      asset: symbol.toUpperCase(),
-      marketSymbol: symbol.toUpperCase(),
-      marketType: ibkrAssetType(get('assetCategory')),
-      direction: buySell === 'SELL' ? 'short' : 'long',
-      quantity: qty,
-      entry: price,
-      exit: null,
-      sl: null,
-      tp: null,
-      pnl: isClosing ? pnl : 0,
-      result: isClosing ? (pnl >= 0 ? 'win' : 'loss') : 'open',
-      notesPre: '',
-      notesPost: 'Importado de IBKR',
-      notes: 'Importado de IBKR',
-      screenshotsPre: [],
-      screenshotsPost: [],
-      source: 'ibkr',
+    const existing = execMap.get(key);
+    if (existing) {
+      const newQty = existing.qty + absQty;
+      existing.entryWeightedSum += price * absQty;
+      existing.qty = newQty;
+      existing.commission += commission;
+      existing.realized += realized;
+      // Keep earliest date / latest by lexical comparison of dateTime.
+      const dt = get('dateTime') || get('tradeDate') || '';
+      if (dt && dt < existing.minDateTime) existing.minDateTime = dt;
+      return;
+    }
+
+    execMap.set(key, {
+      orderId: orderKey,
+      conid,
+      assetCategory: get('assetCategory') || '',
+      symbol: ibkrDisplaySymbol(get),
+      underlying: (get('underlyingSymbol') || symbol).toUpperCase(),
+      multiplier: ibkrMultiplier(get('assetCategory'), get('multiplier')),
+      currency: get('currency') || '',
+      account: get('accountId') || '',
+      exchange: get('exchange') || '',
+      side: (get('buySell') || (qty < 0 ? 'SELL' : 'BUY')).toUpperCase(),
+      openClose: (get('openCloseIndicator') || '').toUpperCase(),
+      qty: absQty,
+      entryWeightedSum: price * absQty,
+      commission,
+      realized,
+      minDateTime: get('dateTime') || get('tradeDate') || '',
     });
   });
 
-  // Open positions: <OpenPosition> rows
+  // Finalize executions: compute avg price, ISO date, and stable id.
+  const executions = Array.from(execMap.values())
+    .map(e => ({
+      ...e,
+      avgPrice: e.qty ? e.entryWeightedSum / e.qty : 0,
+      date: ibkrDate(e.minDateTime),
+    }))
+    .sort((a, b) => a.minDateTime.localeCompare(b.minDateTime));
+
+  // ---- 2. Pair opens with closes (FIFO per contract) ----
+  const opensByConid = new Map(); // conid -> queue of open execs
+  const consumed = new Set();     // execution orderIds already paired
+  const baseTrade = (e, overrides) => ({
+    ibkrId: 'ibkr-' + e.orderId,
+    date: e.date,
+    asset: e.symbol,
+    marketSymbol: e.symbol,
+    marketType: ibkrAssetType(e.assetCategory),
+    direction: e.side === 'SELL' ? 'short' : 'long',
+    quantity: e.qty,
+    entry: e.avgPrice,
+    exit: null,
+    sl: null,
+    tp: null,
+    pnl: 0,
+    result: 'open',
+    notesPre: '',
+    notesPost: 'Importado de IBKR',
+    notes: 'Importado de IBKR',
+    screenshotsPre: [],
+    screenshotsPost: [],
+    source: 'ibkr',
+    ibkrOrderId: e.orderId,
+    ibkrAccount: e.account,
+    ibkrCurrency: e.currency,
+    ibkrCommission: Math.round(e.commission * 100) / 100,
+    ibkrMultiplier: e.multiplier,
+    ibkrUnderlying: e.underlying,
+    ...overrides,
+  });
+
+  for (const e of executions) {
+    if (e.openClose === 'C' || (!e.openClose && e.realized !== 0)) {
+      // Closing execution: try to match against a queued open of opposite side.
+      const queue = opensByConid.get(e.conid) || [];
+      const matchIdx = queue.findIndex(o =>
+        o.side !== e.side && Math.abs(o.qty - e.qty) < 1e-6
+      );
+      if (matchIdx !== -1) {
+        const open = queue.splice(matchIdx, 1)[0];
+        consumed.add(open.orderId);
+        consumed.add(e.orderId);
+        const totalCommission = open.commission + e.commission;
+        const direction = open.side === 'BUY' ? 'long' : 'short';
+        const grossPerUnit = direction === 'long'
+          ? e.avgPrice - open.avgPrice
+          : open.avgPrice - e.avgPrice;
+        const pnl = Math.round((grossPerUnit * open.qty * open.multiplier - totalCommission) * 100) / 100;
+        out.push(baseTrade(open, {
+          ibkrId: 'ibkr-' + open.orderId + '-' + e.orderId,
+          date: open.date,
+          direction,
+          quantity: open.qty,
+          entry: open.avgPrice,
+          exit: e.avgPrice,
+          pnl,
+          result: pnl > 0 ? 'win' : (pnl < 0 ? 'loss' : 'breakeven'),
+          ibkrCommission: Math.round(totalCommission * 100) / 100,
+        }));
+        continue;
+      }
+      // No matching opening in this report; emit closing on its own using
+      // the realized P&L IBKR provides.
+      consumed.add(e.orderId);
+      const pnl = Math.round((e.realized + e.commission) * 100) / 100;
+      out.push(baseTrade(e, {
+        direction: e.side === 'BUY' ? 'short' : 'long', // closing a short is BUY
+        exit: e.avgPrice,
+        entry: e.avgPrice,
+        pnl,
+        result: pnl > 0 ? 'win' : (pnl < 0 ? 'loss' : 'breakeven'),
+      }));
+      continue;
+    }
+    // Opening execution (or unknown): queue it for later pairing.
+    const queue = opensByConid.get(e.conid) || [];
+    queue.push(e);
+    opensByConid.set(e.conid, queue);
+  }
+
+  // Unpaired openings become "open" trades.
+  for (const queue of opensByConid.values()) {
+    for (const e of queue) {
+      if (consumed.has(e.orderId)) continue;
+      consumed.add(e.orderId);
+      out.push(baseTrade(e));
+    }
+  }
+
+  // ---- 3. <OpenPosition> rows ----
+  // Skip if a matching opening execution was already emitted (same underlying
+  // and direction), otherwise the report would double up.
+  const emittedOpens = new Set(
+    out.filter(t => t.result === 'open').map(t => t.asset + '|' + t.direction)
+  );
   doc.querySelectorAll('OpenPosition').forEach(el => {
     const get = (a) => el.getAttribute(a);
     const symbol = get('symbol');
     if (!symbol) return;
     const position = parseFloat(get('position')) || 0;
     if (position === 0) return;
-    const ibId = 'ibkr-pos-' + symbol.toUpperCase();
+    const direction = position >= 0 ? 'long' : 'short';
+    const displaySymbol = ibkrDisplaySymbol(get);
+    const key = displaySymbol + '|' + direction;
+    if (emittedOpens.has(key)) return;
     out.push({
-      ibkrId: ibId,
+      ibkrId: 'ibkr-pos-' + (get('conid') || displaySymbol),
       date: ibkrDate(get('openDateTime') || get('reportDate')),
-      asset: symbol.toUpperCase(),
-      marketSymbol: symbol.toUpperCase(),
+      asset: displaySymbol,
+      marketSymbol: displaySymbol,
       marketType: ibkrAssetType(get('assetCategory')),
-      direction: position >= 0 ? 'long' : 'short',
+      direction,
       quantity: Math.abs(position),
       entry: parseFloat(get('costBasisPrice')) || parseFloat(get('openPrice')) || 0,
       exit: null,
@@ -2418,6 +2639,10 @@ function parseIbkrReport(doc) {
       screenshotsPre: [],
       screenshotsPost: [],
       source: 'ibkr',
+      ibkrAccount: get('accountId') || '',
+      ibkrCurrency: get('currency') || '',
+      ibkrMultiplier: ibkrMultiplier(get('assetCategory'), get('multiplier')),
+      ibkrUnderlying: (get('underlyingSymbol') || symbol).toUpperCase(),
     });
   });
 
@@ -2433,6 +2658,14 @@ async function syncIbkr() {
     const refCode = await ibkrSendRequest();
     setIbkrMsg('Generando informe (puede tardar unos segundos)...', 'working');
     const doc = await ibkrGetStatement(refCode);
+
+    const accountInfo = parseIbkrAccountInfo(doc);
+    if (accountInfo) {
+      ibkrConfig.account = accountInfo;
+      localStorage.setItem('ibkr_account', JSON.stringify(accountInfo));
+      renderIbkrAccountBox();
+      updateIbkrIndicator();
+    }
 
     const parsed = parseIbkrReport(doc);
     if (!parsed.length) {
@@ -2461,6 +2694,8 @@ async function syncIbkr() {
       await userTradesRef().add(dataToSave);
       saved++;
     }
+    ibkrConfig.lastSync = new Date().toISOString();
+    localStorage.setItem('ibkr_last_sync', ibkrConfig.lastSync);
     setIbkrMsg(`✓ ${saved} importados${skipped ? `, ${skipped} ya existían` : ''}.`, 'success');
   } catch (err) {
     setIbkrMsg(err.message || 'Error al sincronizar con IBKR', 'error');
@@ -2490,9 +2725,12 @@ document.getElementById('ibkr-form').addEventListener('submit', async (e) => {
 });
 
 document.getElementById('ibkr-disconnect-btn').addEventListener('click', () => {
-  ibkrConfig = { token: '', queryId: '' };
+  ibkrConfig = { token: '', queryId: '', lastSync: '', account: null };
   localStorage.removeItem('ibkr_flex_token');
   localStorage.removeItem('ibkr_flex_query');
+  localStorage.removeItem('ibkr_last_sync');
+  localStorage.removeItem('ibkr_account');
+  renderIbkrAccountBox();
   document.getElementById('ibkr-token-input').value = '';
   document.getElementById('ibkr-query-input').value = '';
   document.getElementById('ibkr-disconnect-btn').style.display = 'none';

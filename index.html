@@ -661,9 +661,18 @@
           IBKR no usa contraseña en apps externas. Se conecta con un
           <strong>token de solo lectura</strong> del Flex Web Service.
           En IBKR: <em>Account Management → Settings → Flex Web Service</em>
-          (actívalo) y crea un <em>Flex Query</em> con las secciones
-          <strong>Trades</strong> y <strong>Open Positions</strong>.
+          (actívalo) y crea un <em>Activity Flex Query</em>.
         </p>
+        <details class="ibkr-help-details">
+          <summary>Cómo configurar el Flex Query (estilo TraderSync)</summary>
+          <p>Secciones que el Flex Query debe incluir:</p>
+          <ul>
+            <li><strong>Trades</strong> — nivel de detalle <em>Execution</em> (recomendado) u <em>Order</em>. Campos: <code>accountId, currency, assetCategory, symbol, conid, underlyingSymbol, multiplier, expiry, strike, putCall, tradeID, ibOrderID, ibExecID, dateTime, tradeDate, buySell, quantity, tradePrice, ibCommission, ibCommissionCurrency, netCash, openCloseIndicator, fifoPnlRealized, exchange</code>.</li>
+            <li><strong>Open Positions</strong> — Campos: <code>accountId, currency, assetCategory, symbol, conid, underlyingSymbol, multiplier, expiry, strike, putCall, position, costBasisPrice, openDateTime, reportDate</code>.</li>
+            <li><strong>Cash Report</strong> (opcional) — para reconciliar el balance.</li>
+          </ul>
+          <p>El importador agrupa ejecuciones por <code>ibOrderID</code>, empareja aperturas y cierres en operaciones cerradas (round-trips) y entiende acciones, forex, cripto, futuros y opciones (con strike, expiración y put/call).</p>
+        </details>
         <form id="ibkr-form">
           <div class="form-group">
             <label for="ibkr-token-input">Token Flex Web Service</label>
@@ -673,6 +682,8 @@
             <label for="ibkr-query-input">Flex Query ID</label>
             <input type="text" id="ibkr-query-input" placeholder="Ej. 987654" autocomplete="off" required>
           </div>
+          <div id="ibkr-account-box" class="ibkr-account-box" style="display:none;"></div>
+          <p id="ibkr-last-sync" class="ibkr-last-sync" style="display:none;"></p>
           <p id="ibkr-status-msg" class="ibkr-status-msg"></p>
           <div class="modal-actions">
             <button type="button" class="btn btn-delete" id="ibkr-disconnect-btn" style="display:none;">Desconectar</button>
