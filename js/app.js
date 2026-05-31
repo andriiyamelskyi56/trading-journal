@@ -2255,21 +2255,53 @@ let ibkrConfig = {
   token: localStorage.getItem('ibkr_flex_token') || '',
   queryId: localStorage.getItem('ibkr_flex_query') || '',
   lastSync: localStorage.getItem('ibkr_last_sync') || '',
+  account: (() => {
+    try { return JSON.parse(localStorage.getItem('ibkr_account') || 'null'); }
+    catch { return null; }
+  })(),
 };
 
 function ibkrConnected() {
   return !!(ibkrConfig.token && ibkrConfig.queryId);
 }
 
+function ibkrAccountLabel() {
+  const a = ibkrConfig.account;
+  if (!a) return 'IBKR conectado';
+  const id = a.alias || a.accountId || '';
+  const cur = a.currency ? ` · ${a.currency}` : '';
+  return id ? `IBKR ${id}${cur}` : 'IBKR conectado';
+}
+
 function updateIbkrIndicator() {
   const el = document.getElementById('ibkr-status-sidebar');
   if (!el) return;
   if (ibkrConnected()) {
-    el.innerHTML = '<span class="schwab-dot schwab-on"></span> IBKR conectado';
+    el.innerHTML = `<span class="schwab-dot schwab-on"></span> ${ibkrAccountLabel()}`;
   } else {
     el.innerHTML = '<span class="schwab-dot schwab-off"></span> Conectar IBKR';
   }
   el.onclick = openIbkrModal;
+}
+
+function renderIbkrAccountBox() {
+  const box = document.getElementById('ibkr-account-box');
+  if (!box) return;
+  const a = ibkrConfig.account;
+  if (!a) { box.style.display = 'none'; box.innerHTML = ''; return; }
+  const rows = [
+    ['Cuenta', a.accountId || '—'],
+    a.alias ? ['Alias', a.alias] : null,
+    a.name ? ['Titular', a.name] : null,
+    a.accountType ? ['Tipo', a.accountType] : null,
+    a.currency ? ['Divisa base', a.currency] : null,
+    a.period ? ['Período del informe', a.period] : null,
+    a.fromDate && a.toDate ? ['Rango', `${a.fromDate} → ${a.toDate}`] : null,
+    a.whenGenerated ? ['Generado', a.whenGenerated] : null,
+  ].filter(Boolean);
+  box.innerHTML = '<div class="ibkr-account-title">Cuenta conectada</div>' +
+    rows.map(([k, v]) => `<div class="ibkr-account-row"><span>${k}</span><strong>${v}</strong></div>`).join('');
+  box.style.display = '';
 }
 
 function openIbkrModal() {
@@ -2286,6 +2318,7 @@ function openIbkrModal() {
       lastEl.style.display = 'none';
     }
   }
+  renderIbkrAccountBox();
   setIbkrMsg('', '');
   document.getElementById('ibkr-modal').classList.add('open');
 }
@@ -2382,6 +2415,26 @@ function ibkrDisplaySymbol(get) {
   const strike = get('strike');
   const pc = (get('putCall') || '').toUpperCase().charAt(0);
   return `${underlying} ${expiry} ${pc}${strike}`.trim();
+}
+
+// Extract account/statement metadata from the Flex report.
+function parseIbkrAccountInfo(doc) {
+  const info = doc.querySelector('AccountInformation');
+  const stmt = doc.querySelector('FlexStatement');
+  const get = (el, a) => (el && el.getAttribute(a)) || '';
+  const accountId = get(info, 'accountId') || get(stmt, 'accountId') || '';
+  if (!accountId) return null;
+  return {
+    accountId,
+    alias: get(info, 'acctAlias'),
+    name: get(info, 'name'),
+    accountType: get(info, 'accountType'),
+    currency: get(info, 'currency'),
+    period: get(stmt, 'period'),
+    fromDate: ibkrDate(get(stmt, 'fromDate')),
+    toDate: ibkrDate(get(stmt, 'toDate')),
+    whenGenerated: get(stmt, 'whenGenerated'),
+  };
 }
 
 // Convert the Flex report XML into journal trade objects.
@@ -2606,6 +2659,14 @@ async function syncIbkr() {
     setIbkrMsg('Generando informe (puede tardar unos segundos)...', 'working');
     const doc = await ibkrGetStatement(refCode);
 
+    const accountInfo = parseIbkrAccountInfo(doc);
+    if (accountInfo) {
+      ibkrConfig.account = accountInfo;
+      localStorage.setItem('ibkr_account', JSON.stringify(accountInfo));
+      renderIbkrAccountBox();
+      updateIbkrIndicator();
+    }
+
     const parsed = parseIbkrReport(doc);
     if (!parsed.length) {
       setIbkrMsg('El informe no contiene trades ni posiciones. Revisa que el Flex Query incluya las secciones Trades y Open Positions.', 'error');
@@ -2664,10 +2725,12 @@ document.getElementById('ibkr-form').addEventListener('submit', async (e) => {
 });
 
 document.getElementById('ibkr-disconnect-btn').addEventListener('click', () => {
-  ibkrConfig = { token: '', queryId: '', lastSync: '' };
+  ibkrConfig = { token: '', queryId: '', lastSync: '', account: null };
   localStorage.removeItem('ibkr_flex_token');
   localStorage.removeItem('ibkr_flex_query');
   localStorage.removeItem('ibkr_last_sync');
+  localStorage.removeItem('ibkr_account');
+  renderIbkrAccountBox();
   document.getElementById('ibkr-token-input').value = '';
   document.getElementById('ibkr-query-input').value = '';
   document.getElementById('ibkr-disconnect-btn').style.display = 'none';
