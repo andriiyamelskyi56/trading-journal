@@ -1833,6 +1833,34 @@ a { color: var(--accent); text-decoration: none; }
   padding: 12px;
   margin-bottom: 16px;
 }
+.ibkr-help-details {
+  font-size: 12px;
+  color: var(--text-muted);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 12px;
+  margin-bottom: 16px;
+}
+.ibkr-help-details summary {
+  cursor: pointer;
+  color: var(--text);
+  font-weight: 500;
+}
+.ibkr-help-details ul { padding-left: 18px; margin: 6px 0; }
+.ibkr-help-details code {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0 4px;
+  font-size: 11px;
+  word-break: break-word;
+}
+.ibkr-last-sync {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin: 0 0 4px;
+}
 .ibkr-status-msg {
   font-size: 12px;
   margin: 4px 0 12px;
