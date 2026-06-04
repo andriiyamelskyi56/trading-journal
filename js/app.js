@@ -4545,3 +4545,59 @@ document.addEventListener('visibilitychange', () => {
   if (document.hidden) stopLivePolling();
   else startLivePolling();
 });
+
+// ==================== CALCULADORA RPM ====================
+(function initRpmCalculator() {
+  const fmt = (n, decimals = 0) => {
+    if (!Number.isFinite(n)) return '--';
+    return n.toLocaleString('es-ES', {
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals,
+    });
+  };
+  const rpmFromVcD = (vc, d) => (vc * 1000) / (Math.PI * d);
+
+  const tornoForm = document.getElementById('rpm-torno-form');
+  if (tornoForm) {
+    const dIn = document.getElementById('rpm-torno-d');
+    const vcIn = document.getElementById('rpm-torno-vc');
+    const out = document.getElementById('rpm-torno-result');
+    const calc = () => {
+      const d = parseFloat(dIn.value);
+      const vc = parseFloat(vcIn.value);
+      if (!(d > 0) || !(vc > 0)) { out.textContent = '--'; return; }
+      out.textContent = fmt(rpmFromVcD(vc, d), 0) + ' rpm';
+    };
+    tornoForm.addEventListener('submit', (e) => { e.preventDefault(); calc(); });
+    [dIn, vcIn].forEach(el => el.addEventListener('input', calc));
+    tornoForm.addEventListener('reset', () => {
+      setTimeout(() => { out.textContent = '--'; }, 0);
+    });
+  }
+
+  const fresaForm = document.getElementById('rpm-fresa-form');
+  if (fresaForm) {
+    const dIn = document.getElementById('rpm-fresa-d');
+    const vcIn = document.getElementById('rpm-fresa-vc');
+    const zIn = document.getElementById('rpm-fresa-z');
+    const fzIn = document.getElementById('rpm-fresa-fz');
+    const outN = document.getElementById('rpm-fresa-result');
+    const outVf = document.getElementById('rpm-fresa-vf');
+    const calc = () => {
+      const d = parseFloat(dIn.value);
+      const vc = parseFloat(vcIn.value);
+      const z = parseInt(zIn.value, 10);
+      const fz = parseFloat(fzIn.value);
+      if (!(d > 0) || !(vc > 0)) { outN.textContent = '--'; outVf.textContent = '--'; return; }
+      const n = rpmFromVcD(vc, d);
+      outN.textContent = fmt(n, 0) + ' rpm';
+      if (z > 0 && fz > 0) outVf.textContent = fmt(fz * z * n, 1) + ' mm/min';
+      else outVf.textContent = '--';
+    };
+    fresaForm.addEventListener('submit', (e) => { e.preventDefault(); calc(); });
+    [dIn, vcIn, zIn, fzIn].forEach(el => el.addEventListener('input', calc));
+    fresaForm.addEventListener('reset', () => {
+      setTimeout(() => { outN.textContent = '--'; outVf.textContent = '--'; }, 0);
+    });
+  }
+})();

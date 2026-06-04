@@ -156,6 +156,9 @@
         <li><a href="#" data-section="mochilas">
           <span class="nav-icon">&#127890;</span> Mochilas
         </a></li>
+        <li><a href="#" data-section="rpm-calc">
+          <span class="nav-icon">&#128295;</span> Calculadora RPM
+        </a></li>
       </ul>
       <div class="sidebar-footer">
         <div class="schwab-status-bar" id="schwab-status-sidebar">
@@ -643,6 +646,78 @@
               </div>
             </div>
             <div class="mochila-chart-container" id="mochila-chart"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- CALCULADORA RPM (Torno y Fresadora) -->
+      <section id="rpm-calc" class="section">
+        <div class="section-header">
+          <h2>Calculadora RPM</h2>
+        </div>
+        <p style="color:var(--text-muted,#888);margin:-8px 0 16px;">
+          Calcula las revoluciones por minuto (n) a partir del diámetro (D) y la velocidad de corte (Vc).
+          Fórmula: <strong>n = (Vc · 1000) / (&pi; · D)</strong>. Para fresado, el avance se calcula como
+          <strong>Vf = fz · z · n</strong>.
+        </p>
+
+        <div class="rpm-grid">
+          <!-- TORNO -->
+          <div class="card rpm-card">
+            <h3 class="rpm-card-title">Torno</h3>
+            <form id="rpm-torno-form" class="rpm-form" autocomplete="off">
+              <div class="form-group">
+                <label for="rpm-torno-d">Diámetro D (mm)</label>
+                <input type="number" id="rpm-torno-d" step="0.01" min="0.01" placeholder="Ej. 50" required>
+              </div>
+              <div class="form-group">
+                <label for="rpm-torno-vc">Velocidad de corte Vc (m/min)</label>
+                <input type="number" id="rpm-torno-vc" step="0.1" min="0.1" placeholder="Ej. 120" required>
+              </div>
+              <div class="rpm-actions">
+                <button type="submit" class="btn btn-primary">Calcular</button>
+                <button type="reset" class="btn" id="rpm-torno-reset">Limpiar</button>
+              </div>
+            </form>
+            <div class="rpm-result">
+              <span class="rpm-result-label">RPM (n)</span>
+              <span class="rpm-result-value" id="rpm-torno-result">--</span>
+            </div>
+          </div>
+
+          <!-- FRESADORA -->
+          <div class="card rpm-card">
+            <h3 class="rpm-card-title">Fresadora</h3>
+            <form id="rpm-fresa-form" class="rpm-form" autocomplete="off">
+              <div class="form-group">
+                <label for="rpm-fresa-d">Diámetro de la fresa D (mm)</label>
+                <input type="number" id="rpm-fresa-d" step="0.01" min="0.01" placeholder="Ej. 12" required>
+              </div>
+              <div class="form-group">
+                <label for="rpm-fresa-vc">Velocidad de corte Vc (m/min)</label>
+                <input type="number" id="rpm-fresa-vc" step="0.1" min="0.1" placeholder="Ej. 200" required>
+              </div>
+              <div class="form-group">
+                <label for="rpm-fresa-z">Número de dientes z</label>
+                <input type="number" id="rpm-fresa-z" step="1" min="1" placeholder="Ej. 4" required>
+              </div>
+              <div class="form-group">
+                <label for="rpm-fresa-fz">Avance por diente fz (mm/diente) <span style="color:var(--text-muted,#888);font-weight:400;">(opcional)</span></label>
+                <input type="number" id="rpm-fresa-fz" step="0.001" min="0" placeholder="Ej. 0.05">
+              </div>
+              <div class="rpm-actions">
+                <button type="submit" class="btn btn-primary">Calcular</button>
+                <button type="reset" class="btn" id="rpm-fresa-reset">Limpiar</button>
+              </div>
+            </form>
+            <div class="rpm-result">
+              <span class="rpm-result-label">RPM (n)</span>
+              <span class="rpm-result-value" id="rpm-fresa-result">--</span>
+            </div>
+            <div class="rpm-result">
+              <span class="rpm-result-label">Avance Vf (mm/min)</span>
+              <span class="rpm-result-value" id="rpm-fresa-vf">--</span>
+            </div>
           </div>
         </div>
       </section>
