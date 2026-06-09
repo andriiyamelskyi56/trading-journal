@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Trading Journal</title>
-  <link rel="stylesheet" href="css/styles.css?v=49">
+  <link rel="stylesheet" href="css/styles.css?v=50">
 </head>
 <body>
   <!-- PANTALLA DE AUTH -->
@@ -147,26 +147,11 @@
         <li><a href="#" data-section="stats">
           <span class="nav-icon">&#128202;</span> Estadísticas
         </a></li>
-        <li><a href="#" data-section="markets">
-          <span class="nav-icon">&#128176;</span> Mercados
-        </a></li>
-        <li><a href="#" data-section="charts">
-          <span class="nav-icon">&#128201;</span> Gráficos
-        </a></li>
         <li><a href="#" data-section="edge">
           <span class="nav-icon">&#128293;</span> Edge
         </a></li>
-        <li><a href="#" data-section="mochilas">
-          <span class="nav-icon">&#127890;</span> Mochilas
-        </a></li>
       </ul>
       <div class="sidebar-footer">
-        <div class="schwab-status-bar" id="schwab-status-sidebar">
-          <span class="schwab-dot schwab-off"></span> Cargando...
-        </div>
-        <div class="schwab-status-bar" id="ibkr-status-sidebar">
-          <span class="schwab-dot schwab-off"></span> Conectar IBKR
-        </div>
         <span id="user-email" class="user-email"></span>
         <button class="btn btn-sm" id="logout-btn">Salir</button>
       </div>
@@ -249,45 +234,6 @@
             <span class="card-label">R:R Promedio</span>
             <span class="card-value" id="avg-rr">--</span>
           </div>
-        </div>
-
-        <!-- Posiciones Abiertas -->
-        <div class="open-positions-section" id="open-positions-section" style="display:none;">
-          <div class="section-header" style="margin-bottom:12px;">
-            <h3 style="font-size:16px;font-weight:700;">Posiciones Abiertas</h3>
-            <button class="btn btn-sm" id="refresh-open-btn">&#8635; Actualizar precios</button>
-          </div>
-          <div class="open-positions-table-wrap">
-            <table class="trades-table">
-              <thead>
-                <tr>
-                  <th>Activo</th>
-                  <th>Dir.</th>
-                  <th>Lotes</th>
-                  <th>Entrada</th>
-                  <th>Precio actual</th>
-                  <th>P&L No Realizado</th>
-                  <th>% Cambio</th>
-                  <th>Desde</th>
-                  <th>Gráfico</th>
-                </tr>
-              </thead>
-              <tbody id="open-positions-body"></tbody>
-            </table>
-          </div>
-
-          <!-- Curvas P&L por posición -->
-          <div class="open-pnl-filter-wrap" id="open-pnl-filter-wrap" style="display:none;">
-            <div class="open-pnl-filter-header">
-              <span class="open-pnl-filter-label">Gráficos visibles</span>
-              <div class="open-pnl-filter-actions">
-                <button class="btn btn-sm" id="open-pnl-select-all" type="button">Todos</button>
-                <button class="btn btn-sm" id="open-pnl-select-none" type="button">Ninguno</button>
-              </div>
-            </div>
-            <div class="open-pnl-filter-chips" id="open-pnl-filter-chips"></div>
-          </div>
-          <div id="open-pnl-curves" class="open-pnl-curves"></div>
         </div>
 
         <!-- Equity Curve -->
@@ -436,162 +382,6 @@
           </div>
         </div>
       </section>
-
-      <!-- MERCADOS / WATCHLISTS -->
-      <section id="markets" class="section">
-        <div class="section-header">
-          <h2>Mercados</h2>
-          <div class="markets-actions">
-            <button class="btn btn-primary" id="add-watchlist-btn">+ Nueva Lista</button>
-          </div>
-        </div>
-
-        <!-- Watchlist Tabs -->
-        <div class="watchlist-tabs" id="watchlist-tabs"></div>
-
-        <!-- Add instrument form -->
-        <div class="add-instrument-bar" id="add-instrument-bar" style="display:none;">
-          <div class="add-instrument-form">
-            <select id="instrument-type">
-              <option value="crypto">Crypto</option>
-              <option value="forex">Forex</option>
-              <option value="stock">Acciones</option>
-            </select>
-            <input type="text" id="instrument-symbol" placeholder="Ej: BTCUSDT, ETHUSDT..." autocomplete="off">
-            <input type="text" id="instrument-name" placeholder="Nombre (Bitcoin, Ethereum...)">
-            <button class="btn btn-primary btn-sm" id="add-instrument-btn">Añadir</button>
-          </div>
-          <div class="instrument-suggestions" id="instrument-suggestions"></div>
-        </div>
-
-        <!-- Quotes Table -->
-        <div class="quotes-container">
-          <div class="quotes-header">
-            <span class="quotes-refresh-info" id="quotes-refresh-info">Actualizado: --</span>
-            <button class="btn btn-sm" id="refresh-quotes-btn">&#8635; Actualizar</button>
-          </div>
-          <table class="trades-table quotes-table">
-            <thead>
-              <tr>
-                <th>Instrumento</th>
-                <th>Precio</th>
-                <th>Cambio 24h</th>
-                <th>% Cambio</th>
-                <th>Max 24h</th>
-                <th>Min 24h</th>
-                <th>Volumen</th>
-                <th>Acciones</th>
-              </tr>
-            </thead>
-            <tbody id="quotes-table-body">
-              <tr><td colspan="8" class="empty-msg">Selecciona o crea una lista para ver cotizaciones</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <!-- GRAFICOS -->
-      <section id="charts" class="section">
-        <div class="section-header">
-          <h2>Gráficos</h2>
-          <div class="schwab-status-bar" id="schwab-status">
-            <span class="schwab-dot schwab-off"></span> Cargando...
-          </div>
-        </div>
-
-        <div class="charts-controls">
-          <div class="charts-symbol-select">
-            <label>Instrumento</label>
-            <div class="chart-search-wrapper">
-              <input type="text" id="chart-symbol-input" placeholder="Buscar instrumento..." autocomplete="off">
-              <div class="chart-search-dropdown" id="chart-search-dropdown"></div>
-            </div>
-          </div>
-          <div class="charts-range-btns">
-            <label>Periodo</label>
-            <div class="btn-group" id="chart-range-btns">
-              <button class="btn btn-sm" data-range="1D">1D</button>
-              <button class="btn btn-sm" data-range="5D">5D</button>
-              <button class="btn btn-sm active" data-range="1M">1M</button>
-              <button class="btn btn-sm" data-range="3M">3M</button>
-              <button class="btn btn-sm" data-range="6M">6M</button>
-              <button class="btn btn-sm" data-range="1Y">1Y</button>
-              <button class="btn btn-sm" data-range="5Y">5Y</button>
-            </div>
-          </div>
-          <div class="charts-trades-toggle">
-            <label class="toggle-label"><input type="checkbox" id="chart-show-trades" checked> <span>Trades</span></label>
-          </div>
-          <div class="charts-compare-controls">
-            <button class="btn btn-sm" id="chart-compare-btn">+ Comparar</button>
-            <div class="chart-overlay-tags" id="chart-overlay-tags"></div>
-          </div>
-        </div>
-        <div class="chart-compare-panel" id="chart-compare-panel" style="display:none;">
-          <input type="text" id="chart-compare-input" placeholder="Escribe un símbolo y pulsa Enter..." autocomplete="off">
-        </div>
-
-        <div class="chart-main-container">
-          <div class="chart-info-bar" id="chart-info-bar">
-            <span class="chart-info-symbol" id="chart-info-symbol">--</span>
-            <span class="chart-info-price" id="chart-info-price">--</span>
-            <span class="chart-info-change" id="chart-info-change"></span>
-            <button class="chart-fullscreen-btn" id="chart-fullscreen-btn" title="Pantalla completa">&#x26F6;</button>
-          </div>
-          <div id="tv-chart-container" class="tv-chart-container">
-            <div class="chart-placeholder">Busca un instrumento para ver su gráfico</div>
-          </div>
-          <div id="chart-trade-tooltip" class="chart-trade-tooltip" style="display:none;"></div>
-        </div>
-
-        <div class="chart-details-grid" id="chart-details-grid" style="display:none;">
-          <div class="chart-detail-card">
-            <span class="chart-detail-label">Apertura</span>
-            <span class="chart-detail-value" id="chart-detail-open">--</span>
-          </div>
-          <div class="chart-detail-card">
-            <span class="chart-detail-label">Máximo</span>
-            <span class="chart-detail-value" id="chart-detail-high">--</span>
-          </div>
-          <div class="chart-detail-card">
-            <span class="chart-detail-label">Mínimo</span>
-            <span class="chart-detail-value" id="chart-detail-low">--</span>
-          </div>
-          <div class="chart-detail-card">
-            <span class="chart-detail-label">Cierre</span>
-            <span class="chart-detail-value" id="chart-detail-close">--</span>
-          </div>
-          <div class="chart-detail-card">
-            <span class="chart-detail-label">Cierre Anterior</span>
-            <span class="chart-detail-value" id="chart-detail-prevclose">--</span>
-          </div>
-          <div class="chart-detail-card">
-            <span class="chart-detail-label">Volumen</span>
-            <span class="chart-detail-value" id="chart-detail-volume">--</span>
-          </div>
-          <div class="chart-detail-card">
-            <span class="chart-detail-label">Variación</span>
-            <span class="chart-detail-value" id="chart-detail-change">--</span>
-          </div>
-          <div class="chart-detail-card chart-detail-card-wide">
-            <span class="chart-detail-label">Rango del Día</span>
-            <div class="day-range-bar">
-              <span class="day-range-low" id="day-range-low">--</span>
-              <div class="day-range-track"><div class="day-range-fill" id="day-range-fill"></div><div class="day-range-dot" id="day-range-dot"></div></div>
-              <span class="day-range-high" id="day-range-high">--</span>
-            </div>
-          </div>
-          <div class="chart-detail-card chart-detail-card-wide" id="chart-52w-card" style="display:none;">
-            <span class="chart-detail-label">Rango 52 Semanas</span>
-            <div class="day-range-bar">
-              <span class="day-range-low" id="52w-range-low">--</span>
-              <div class="day-range-track"><div class="day-range-fill" id="52w-range-fill"></div><div class="day-range-dot" id="52w-range-dot"></div></div>
-              <span class="day-range-high" id="52w-range-high">--</span>
-            </div>
-          </div>
-        </div>
-      </section>
-
       <!-- EDGE -->
       <section id="edge" class="section">
         <div class="section-header">
@@ -633,160 +423,7 @@
         <p id="edge-empty" class="edge-empty" style="display:none;">Todavía no hay operaciones cerradas etiquetadas. Etiqueta al menos una operación en el tab <strong>Edge</strong> del formulario.</p>
       </section>
 
-      <!-- MOCHILAS -->
-      <section id="mochilas" class="section">
-        <div class="section-header">
-          <h2>Mochilas</h2>
-          <button class="btn btn-primary btn-sm" id="new-mochila-btn">+ Nueva Mochila</button>
-        </div>
-
-        <div class="mochilas-tabs" id="mochilas-tabs"></div>
-
-        <div id="mochila-empty" class="mochila-empty">
-          <p>Crea una mochila para agrupar instrumentos y ver su rendimiento conjunto.</p>
-        </div>
-
-        <div id="mochila-detail" style="display:none;">
-          <div class="mochila-stats">
-            <div class="card">
-              <div class="card-label">P&amp;L Total</div>
-              <div class="card-value" id="mochila-total-pnl">--</div>
-            </div>
-            <div class="card">
-              <div class="card-label">Trades</div>
-              <div class="card-value" id="mochila-trades-count">0</div>
-            </div>
-            <div class="card">
-              <div class="card-label">Símbolos</div>
-              <div class="card-value" id="mochila-symbols-count">0</div>
-            </div>
-            <div class="card">
-              <div class="card-label">Win Rate</div>
-              <div class="card-value" id="mochila-winrate">--</div>
-            </div>
-          </div>
-
-          <div class="mochila-symbols-section">
-            <div class="mochila-symbols-header">
-              <h4>Símbolos en esta mochila</h4>
-              <button class="btn btn-sm" id="delete-mochila-btn">&times; Eliminar mochila</button>
-            </div>
-            <div class="mochila-symbols-chips" id="mochila-symbols-chips"></div>
-            <div class="mochila-add-symbol">
-              <input type="text" id="mochila-add-symbol-input" placeholder="Añadir símbolo (ej. AAPL)" maxlength="20" autocomplete="off">
-              <button class="btn btn-sm" id="mochila-add-symbol-btn">Añadir</button>
-            </div>
-          </div>
-
-          <div class="mochila-chart-section chart-box">
-            <div class="mochila-chart-header">
-              <h3>Curva P&amp;L acumulado</h3>
-              <div class="mochila-compare">
-                <input type="text" id="mochila-compare-input" placeholder="Comparar con (ej. SPY)" maxlength="20" autocomplete="off">
-                <button class="btn btn-sm" id="mochila-compare-btn">Comparar</button>
-                <button class="btn btn-sm" id="mochila-compare-clear" style="display:none;">Quitar comparación</button>
-              </div>
-            </div>
-            <div class="mochila-chart-container" id="mochila-chart"></div>
-          </div>
-        </div>
-      </section>
     </main>
-  </div>
-
-  <!-- MODAL CONECTAR IBKR -->
-  <div class="modal-overlay" id="ibkr-modal">
-    <div class="modal">
-      <div class="modal-header">
-        <h3>Conectar Interactive Brokers</h3>
-        <button class="modal-close" id="ibkr-modal-close">&times;</button>
-      </div>
-      <div class="ibkr-modal-body">
-        <p class="ibkr-help">
-          IBKR no usa contraseña en apps externas. Se conecta con un
-          <strong>token de solo lectura</strong> del Flex Web Service.
-          En IBKR: <em>Account Management → Settings → Flex Web Service</em>
-          (actívalo) y crea un <em>Activity Flex Query</em>.
-        </p>
-        <details class="ibkr-help-details">
-          <summary>Cómo configurar el Flex Query (estilo TraderSync)</summary>
-          <p>Secciones que el Flex Query debe incluir:</p>
-          <ul>
-            <li><strong>Trades</strong> — nivel de detalle <em>Execution</em> (recomendado) u <em>Order</em>. Campos: <code>accountId, currency, assetCategory, symbol, conid, underlyingSymbol, multiplier, expiry, strike, putCall, tradeID, ibOrderID, ibExecID, dateTime, tradeDate, buySell, quantity, tradePrice, ibCommission, ibCommissionCurrency, netCash, openCloseIndicator, fifoPnlRealized, exchange</code>.</li>
-            <li><strong>Open Positions</strong> — Campos: <code>accountId, currency, assetCategory, symbol, conid, underlyingSymbol, multiplier, expiry, strike, putCall, position, costBasisPrice, openDateTime, reportDate</code>.</li>
-            <li><strong>Cash Report</strong> (opcional) — para reconciliar el balance.</li>
-          </ul>
-          <p>El importador agrupa ejecuciones por <code>ibOrderID</code>, empareja aperturas y cierres en operaciones cerradas (round-trips) y entiende acciones, forex, cripto, futuros y opciones (con strike, expiración y put/call).</p>
-        </details>
-        <form id="ibkr-form">
-          <div class="form-group">
-            <label for="ibkr-token-input">Token Flex Web Service</label>
-            <input type="text" id="ibkr-token-input" placeholder="Ej. 123456789012345678901234" autocomplete="off" required>
-          </div>
-          <div class="form-group">
-            <label for="ibkr-query-input">Flex Query ID</label>
-            <input type="text" id="ibkr-query-input" placeholder="Ej. 987654" autocomplete="off" required>
-          </div>
-          <div id="ibkr-account-box" class="ibkr-account-box" style="display:none;"></div>
-          <p id="ibkr-last-sync" class="ibkr-last-sync" style="display:none;"></p>
-          <p id="ibkr-status-msg" class="ibkr-status-msg"></p>
-          <div class="modal-actions">
-            <button type="button" class="btn btn-delete" id="ibkr-disconnect-btn" style="display:none;">Desconectar</button>
-            <button type="button" class="btn" id="ibkr-modal-cancel">Cancelar</button>
-            <button type="submit" class="btn btn-primary" id="ibkr-sync-btn">Guardar y sincronizar</button>
-          </div>
-        </form>
-      </div>
-    </div>
-  </div>
-
-  <!-- MODAL NUEVA MOCHILA -->
-  <div class="modal-overlay" id="mochila-modal">
-    <div class="modal">
-      <div class="modal-header">
-        <h3>Nueva Mochila</h3>
-        <button class="modal-close" id="mochila-modal-close">&times;</button>
-      </div>
-      <form id="mochila-form">
-        <div class="form-group">
-          <label for="mochila-name-input">Nombre</label>
-          <input type="text" id="mochila-name-input" placeholder="Ej. Tech, Mis swing trades" maxlength="40" required>
-        </div>
-        <div class="modal-actions">
-          <button type="button" class="btn" id="mochila-modal-cancel">Cancelar</button>
-          <button type="submit" class="btn btn-primary">Crear</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <!-- MODAL NUEVA LISTA -->
-  <div class="modal-overlay" id="watchlist-modal">
-    <div class="modal">
-      <div class="modal-header">
-        <h3 id="watchlist-modal-title">Nueva Lista</h3>
-        <button class="modal-close" id="watchlist-modal-close">&times;</button>
-      </div>
-      <form id="watchlist-form">
-        <div class="form-group">
-          <label for="watchlist-name">Nombre de la lista</label>
-          <input type="text" id="watchlist-name" placeholder="Ej: Mis Cryptos, Forex Majors..." required>
-        </div>
-        <div class="form-group">
-          <label for="watchlist-type">Tipo de instrumentos</label>
-          <select id="watchlist-type">
-            <option value="crypto">Crypto</option>
-            <option value="forex">Forex</option>
-            <option value="stock">Acciones</option>
-            <option value="mixed">Mixta</option>
-          </select>
-        </div>
-        <div class="form-actions">
-          <button type="button" class="btn" id="watchlist-modal-cancel">Cancelar</button>
-          <button type="submit" class="btn btn-primary">Crear Lista</button>
-        </div>
-      </form>
-    </div>
   </div>
 
   <!-- MODAL NUEVA OPERACIÓN -->
@@ -967,21 +604,6 @@
               <div class="rr-actual" id="trade-rr-actual">--</div>
             </div>
           </div>
-          <!-- Ticker de mercado (solo para posiciones abiertas) -->
-          <div class="form-row" id="open-position-fields" style="display:none;">
-            <div class="form-group">
-              <label for="trade-market-symbol">Ticker de Mercado</label>
-              <input type="text" id="trade-market-symbol" placeholder="AAPL, BTCUSDT, EURUSD..." autocomplete="off">
-            </div>
-            <div class="form-group">
-              <label for="trade-market-type">Tipo de Mercado</label>
-              <select id="trade-market-type">
-                <option value="stock">Acción</option>
-                <option value="crypto">Crypto</option>
-                <option value="forex">Forex</option>
-              </select>
-            </div>
-          </div>
           <div class="form-group full-width">
             <label for="trade-notes-post">Notas Post-Trade</label>
             <textarea id="trade-notes-post" rows="2" placeholder="Que salio bien/mal, lecciones..."></textarea>
@@ -1004,74 +626,6 @@
     </div>
   </div>
 
-  <!-- MODAL: WIZARD DE TAGGING POST-IBKR -->
-  <div class="modal-overlay" id="tagging-modal">
-    <div class="modal modal-wide">
-      <div class="modal-header">
-        <h3 id="tagging-title">Etiquetar operaciones nuevas</h3>
-        <button class="modal-close" id="tagging-close">&times;</button>
-      </div>
-      <div class="tagging-body">
-        <p class="tagging-help">Cada operación importada de IBKR pasa por aquí. Sin etiquetas no podemos medir tu edge — pero puedes saltar si aún no lo tienes claro.</p>
-        <div class="tagging-progress">
-          <span id="tagging-progress-text">1 / 1</span>
-          <div class="tagging-progress-bar"><div id="tagging-progress-fill"></div></div>
-        </div>
-        <div class="tagging-trade-card" id="tagging-trade-card"></div>
-        <div class="form-row">
-          <div class="form-group">
-            <label for="tagging-setup">Setup / Estrategia</label>
-            <select id="tagging-setup"></select>
-          </div>
-          <div class="form-group">
-            <label for="tagging-session">Sesión</label>
-            <select id="tagging-session">
-              <option value="">— Sin definir —</option>
-              <option value="preapertura">Preapertura</option>
-              <option value="primera-hora">Primera hora</option>
-              <option value="midday">Midday</option>
-              <option value="power-hour">Power Hour</option>
-              <option value="after-hours">After-hours</option>
-            </select>
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label for="tagging-trend">Tendencia</label>
-            <select id="tagging-trend">
-              <option value="">— Sin definir —</option>
-              <option value="alcista">Alcista</option>
-              <option value="lateral">Lateral</option>
-              <option value="bajista">Bajista</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label for="tagging-adherence">Adherencia al plan</label>
-            <select id="tagging-adherence">
-              <option value="">— Sin definir —</option>
-              <option value="1">1 · Improvisé</option>
-              <option value="2">2</option>
-              <option value="3">3 · Mitad</option>
-              <option value="4">4</option>
-              <option value="5">5 · Lo seguí al pie</option>
-            </select>
-          </div>
-        </div>
-        <div class="form-group full-width">
-          <label>Errores</label>
-          <div class="chip-multiselect" id="tagging-mistakes-chips"></div>
-        </div>
-        <div class="form-group full-width">
-          <label>Aplicar a todos los siguientes (apply-all)</label>
-          <label class="checkbox-inline"><input type="checkbox" id="tagging-apply-all"> Usa estos mismos valores para los trades restantes y cierra.</label>
-        </div>
-        <div class="form-actions">
-          <button type="button" class="btn" id="tagging-skip">Saltar este</button>
-          <button type="button" class="btn btn-primary" id="tagging-next">Guardar y siguiente</button>
-        </div>
-      </div>
-    </div>
-  </div>
 
   <!-- MODAL: GESTIONAR TAGS -->
   <div class="modal-overlay" id="tag-manager-modal">
@@ -1104,6 +658,6 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
   <script src="js/firebase-config.js?v=30"></script>
-  <script src="js/app.js?v=49"></script>
+  <script src="js/app.js?v=50"></script>
 </body>
 </html>
