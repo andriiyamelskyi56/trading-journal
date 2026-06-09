@@ -448,10 +448,18 @@ function calcRR() {
   const riskEl = document.getElementById('trade-risk');
   const rewardEl = document.getElementById('trade-reward');
 
+  const fmtMoney = (n) => {
+    const a = Math.abs(n);
+    if (a >= 10) return n.toFixed(2);
+    if (a >= 0.1) return n.toFixed(3);
+    if (a >= 0.001) return n.toFixed(5);
+    return n.toFixed(8);
+  };
+
   if (activeId() !== 'trade-risk') {
     if (entry && sl && qty) {
       const riskPrice = dir === 'long' ? entry - sl : sl - entry;
-      riskEl.value = riskPrice > 0 ? (riskPrice * qty).toFixed(2) : '';
+      riskEl.value = riskPrice > 0 ? fmtMoney(riskPrice * qty) : '';
     } else {
       riskEl.value = '';
     }
@@ -460,7 +468,7 @@ function calcRR() {
   if (activeId() !== 'trade-reward') {
     if (entry && tp && qty) {
       const rewardPrice = dir === 'long' ? tp - entry : entry - tp;
-      rewardEl.value = rewardPrice > 0 ? (rewardPrice * qty).toFixed(2) : '';
+      rewardEl.value = rewardPrice > 0 ? fmtMoney(rewardPrice * qty) : '';
     } else {
       rewardEl.value = '';
     }
