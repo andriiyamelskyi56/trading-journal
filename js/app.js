@@ -434,6 +434,10 @@ function switchToTab(tabName) {
 }
 
 // ==================== RR CALCULATION ====================
+// Skip auto-writes on whichever input is being edited so the user is never
+// fighting the cursor while typing.
+function activeId() { return document.activeElement && document.activeElement.id; }
+
 function calcRR() {
   const entry = parseFloat(document.getElementById('trade-entry').value);
   const sl = parseFloat(document.getElementById('trade-sl').value);
@@ -444,48 +448,64 @@ function calcRR() {
   const riskEl = document.getElementById('trade-risk');
   const rewardEl = document.getElementById('trade-reward');
 
-  // Calculate risk in $
-  if (entry && sl && qty) {
-    const riskPrice = dir === 'long' ? entry - sl : sl - entry;
-    const riskMoney = Math.abs(riskPrice * qty);
-    riskEl.textContent = riskPrice > 0 ? `-$${riskMoney.toFixed(2)}` : 'SL invalido';
-  } else {
-    riskEl.textContent = '--';
+  if (activeId() !== 'trade-risk') {
+    if (entry && sl && qty) {
+      const riskPrice = dir === 'long' ? entry - sl : sl - entry;
+      riskEl.value = riskPrice > 0 ? (riskPrice * qty).toFixed(2) : '';
+    } else {
+      riskEl.value = '';
+    }
   }
 
-  // Calculate reward in $
-  if (entry && tp && qty) {
-    const rewardPrice = dir === 'long' ? tp - entry : entry - tp;
-    const rewardMoney = Math.abs(rewardPrice * qty);
-    rewardEl.textContent = rewardPrice > 0 ? `+$${rewardMoney.toFixed(2)}` : 'TP invalido';
-  } else {
-    rewardEl.textContent = '--';
+  if (activeId() !== 'trade-reward') {
+    if (entry && tp && qty) {
+      const rewardPrice = dir === 'long' ? tp - entry : entry - tp;
+      rewardEl.value = rewardPrice > 0 ? (rewardPrice * qty).toFixed(2) : '';
+    } else {
+      rewardEl.value = '';
+    }
   }
 
-  // Calculate RR ratio
-  if (!entry || !sl || !tp || entry === sl) { rrEl.textContent = '--'; return; }
-
-  let risk, reward;
-  if (dir === 'long') {
-    risk = entry - sl;
-    reward = tp - entry;
-  } else {
-    risk = sl - entry;
-    reward = entry - tp;
-  }
-
+  if (!entry || !sl || !tp || entry === sl) { rrEl.textContent = '--'; rrEl.style.color = ''; return; }
+  const risk = dir === 'long' ? entry - sl : sl - entry;
+  const reward = dir === 'long' ? tp - entry : entry - tp;
   if (risk <= 0) { rrEl.textContent = 'SL invalido'; return; }
   if (reward <= 0) { rrEl.textContent = 'TP invalido'; return; }
-
   const rr = reward / risk;
   rrEl.textContent = `1 : ${rr.toFixed(2)}`;
   rrEl.style.color = rr >= 2 ? 'var(--green)' : rr >= 1 ? 'var(--yellow)' : 'var(--red)';
+}
+
+function calcSlFromRisk() {
+  const entry = parseFloat(document.getElementById('trade-entry').value);
+  const qty = parseFloat(document.getElementById('trade-quantity').value) || 0;
+  const risk = Math.abs(parseFloat(document.getElementById('trade-risk').value));
+  const dir = document.getElementById('trade-direction').value;
+  if (!entry || !qty || !risk) return;
+  const riskPerUnit = risk / qty;
+  const sl = dir === 'long' ? entry - riskPerUnit : entry + riskPerUnit;
+  if (sl > 0) document.getElementById('trade-sl').value = +sl.toFixed(8);
+  calcRR();
+}
+
+function calcTpFromReward() {
+  const entry = parseFloat(document.getElementById('trade-entry').value);
+  const qty = parseFloat(document.getElementById('trade-quantity').value) || 0;
+  const reward = Math.abs(parseFloat(document.getElementById('trade-reward').value));
+  const dir = document.getElementById('trade-direction').value;
+  if (!entry || !qty || !reward) return;
+  const rewardPerUnit = reward / qty;
+  const tp = dir === 'long' ? entry + rewardPerUnit : entry - rewardPerUnit;
+  if (tp > 0) document.getElementById('trade-tp').value = +tp.toFixed(8);
+  calcRR();
 }
 
 ['trade-entry', 'trade-sl', 'trade-tp', 'trade-direction', 'trade-quantity'].forEach(id => {
   document.getElementById(id).addEventListener('input', calcRR);
   document.getElementById(id).addEventListener('change', calcRR);
 });
+document.getElementById('trade-risk').addEventListener('input', calcSlFromRisk);
+document.getElementById('trade-reward').addEventListener('input', calcTpFromReward);
 
 // ==================== P&L vs PLAN ====================
 function calcRRActual() {
@@ -714,8 +734,8 @@ function openModal(trade = null) {
   existingScreensPost = [];
   document.getElementById('trade-rr').textContent = '--';
   document.getElementById('trade-rr').style.color = '';
-  document.getElementById('trade-risk').textContent = '--';
-  document.getElementById('trade-reward').textContent = '--';
+  document.getElementById('trade-risk').value = '';
+  document.getElementById('trade-reward').value = '';
   document.getElementById('trade-rr-actual').textContent = '--';
   document.getElementById('trade-rr-actual').style.color = '';
   document.getElementById('modal-title').textContent = 'Nueva Operacion';

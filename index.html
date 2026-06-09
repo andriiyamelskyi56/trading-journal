@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Trading Journal</title>
-  <link rel="stylesheet" href="css/styles.css?v=50">
+  <link rel="stylesheet" href="css/styles.css?v=51">
 </head>
 <body>
   <!-- PANTALLA DE AUTH -->
@@ -488,12 +488,12 @@
           </div>
           <div class="form-row">
             <div class="form-group">
-              <label>Riesgo ($)</label>
-              <div class="rr-display" id="trade-risk" style="color:var(--red);">--</div>
+              <label for="trade-risk">Riesgo ($)</label>
+              <input type="number" id="trade-risk" step="any" placeholder="--">
             </div>
             <div class="form-group">
-              <label>Beneficio potencial ($)</label>
-              <div class="rr-display" id="trade-reward" style="color:var(--green);">--</div>
+              <label for="trade-reward">Beneficio potencial ($)</label>
+              <input type="number" id="trade-reward" step="any" placeholder="--">
             </div>
           </div>
           <div class="form-group full-width">
@@ -658,6 +658,6 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
   <script src="js/firebase-config.js?v=30"></script>
-  <script src="js/app.js?v=50"></script>
+  <script src="js/app.js?v=51"></script>
 </body>
 </html>
