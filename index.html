@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Trading Journal</title>
-  <link rel="stylesheet" href="css/styles.css?v=48">
+  <link rel="stylesheet" href="css/styles.css?v=49">
 </head>
 <body>
   <!-- PANTALLA DE AUTH -->
@@ -152,6 +152,9 @@
         </a></li>
         <li><a href="#" data-section="charts">
           <span class="nav-icon">&#128201;</span> Gráficos
+        </a></li>
+        <li><a href="#" data-section="edge">
+          <span class="nav-icon">&#128293;</span> Edge
         </a></li>
         <li><a href="#" data-section="mochilas">
           <span class="nav-icon">&#127890;</span> Mochilas
@@ -346,6 +349,7 @@
             <tr>
               <th>Fecha</th>
               <th>Activo</th>
+              <th>Setup</th>
               <th>Dir</th>
               <th>Entrada</th>
               <th>SL</th>
@@ -588,6 +592,47 @@
         </div>
       </section>
 
+      <!-- EDGE -->
+      <section id="edge" class="section">
+        <div class="section-header">
+          <h2>Mi Edge</h2>
+          <div class="edge-toolbar">
+            <label>Agrupar por
+              <select id="edge-groupby">
+                <option value="setup">Setup</option>
+                <option value="session">Sesión</option>
+                <option value="trend">Tendencia</option>
+                <option value="volatility">Volatilidad</option>
+                <option value="adherence">Adherencia</option>
+                <option value="mistake">Error</option>
+              </select>
+            </label>
+            <button type="button" class="btn btn-sm" id="edge-manage-setups">Gestionar setups</button>
+            <button type="button" class="btn btn-sm" id="edge-manage-mistakes">Gestionar errores</button>
+          </div>
+        </div>
+        <p class="edge-intro">Solo se incluyen operaciones cerradas con etiquetas. El objetivo es ver qué configuración tiene <strong>esperanza positiva</strong> antes de aumentar tamaño.</p>
+        <div id="edge-summary-cards" class="summary-cards"></div>
+        <div class="full-table" style="overflow-x:auto;">
+          <table class="trades-table" id="edge-table">
+            <thead>
+              <tr>
+                <th id="edge-th-group">Setup</th>
+                <th>Nº trades</th>
+                <th>Win rate</th>
+                <th>P&L total</th>
+                <th>Expectativa / trade</th>
+                <th>R medio</th>
+                <th>Mejor</th>
+                <th>Peor</th>
+              </tr>
+            </thead>
+            <tbody id="edge-table-body"></tbody>
+          </table>
+        </div>
+        <p id="edge-empty" class="edge-empty" style="display:none;">Todavía no hay operaciones cerradas etiquetadas. Etiqueta al menos una operación en el tab <strong>Edge</strong> del formulario.</p>
+      </section>
+
       <!-- MOCHILAS -->
       <section id="mochilas" class="section">
         <div class="section-header">
@@ -753,6 +798,7 @@
       </div>
       <div class="modal-tabs">
         <button class="modal-tab active" data-tab="plan">Plan</button>
+        <button class="modal-tab" data-tab="edge">Edge</button>
         <button class="modal-tab" data-tab="result">Resultado</button>
       </div>
       <form id="trade-form">
@@ -827,6 +873,73 @@
           </div>
         </div>
 
+        <!-- TAB: EDGE -->
+        <div class="modal-tab-content" id="tab-edge">
+          <p class="edge-help">Etiqueta cada operación para que más tarde puedas medir qué setup, sesión o condición de mercado tiene esperanza positiva.</p>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="trade-setup">Setup / Estrategia</label>
+              <div class="select-with-add">
+                <select id="trade-setup"><option value="">— Sin definir —</option></select>
+                <button type="button" class="btn btn-sm" id="trade-setup-add" title="Añadir setup">+</button>
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="trade-session">Sesión / Hora</label>
+              <select id="trade-session">
+                <option value="">— Sin definir —</option>
+                <option value="preapertura">Preapertura</option>
+                <option value="primera-hora">Primera hora (Open)</option>
+                <option value="midday">Midday</option>
+                <option value="power-hour">Power Hour</option>
+                <option value="after-hours">After-hours</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="trade-trend">Tendencia del mercado</label>
+              <select id="trade-trend">
+                <option value="">— Sin definir —</option>
+                <option value="alcista">Alcista</option>
+                <option value="lateral">Lateral</option>
+                <option value="bajista">Bajista</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="trade-volatility">Volatilidad</label>
+              <select id="trade-volatility">
+                <option value="">— Sin definir —</option>
+                <option value="alta">Alta</option>
+                <option value="media">Media</option>
+                <option value="baja">Baja</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group full-width">
+            <label>Errores cometidos</label>
+            <div class="chip-multiselect" id="trade-mistakes-chips"></div>
+            <button type="button" class="btn btn-sm" id="trade-mistake-add" style="margin-top:6px;">+ Añadir error a la lista</button>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="trade-adherence">Adherencia al plan (1 = ninguna, 5 = total)</label>
+              <select id="trade-adherence">
+                <option value="">— Sin definir —</option>
+                <option value="1">1 · Improvisé</option>
+                <option value="2">2</option>
+                <option value="3">3 · Mitad</option>
+                <option value="4">4</option>
+                <option value="5">5 · Lo seguí al pie</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="trade-catalyst">Catalizador (opcional)</label>
+              <input type="text" id="trade-catalyst" placeholder="Earnings, FOMC, news...">
+            </div>
+          </div>
+        </div>
+
         <!-- TAB: RESULTADO -->
         <div class="modal-tab-content" id="tab-result">
           <div class="form-row">
@@ -891,6 +1004,92 @@
     </div>
   </div>
 
+  <!-- MODAL: WIZARD DE TAGGING POST-IBKR -->
+  <div class="modal-overlay" id="tagging-modal">
+    <div class="modal modal-wide">
+      <div class="modal-header">
+        <h3 id="tagging-title">Etiquetar operaciones nuevas</h3>
+        <button class="modal-close" id="tagging-close">&times;</button>
+      </div>
+      <div class="tagging-body">
+        <p class="tagging-help">Cada operación importada de IBKR pasa por aquí. Sin etiquetas no podemos medir tu edge — pero puedes saltar si aún no lo tienes claro.</p>
+        <div class="tagging-progress">
+          <span id="tagging-progress-text">1 / 1</span>
+          <div class="tagging-progress-bar"><div id="tagging-progress-fill"></div></div>
+        </div>
+        <div class="tagging-trade-card" id="tagging-trade-card"></div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="tagging-setup">Setup / Estrategia</label>
+            <select id="tagging-setup"></select>
+          </div>
+          <div class="form-group">
+            <label for="tagging-session">Sesión</label>
+            <select id="tagging-session">
+              <option value="">— Sin definir —</option>
+              <option value="preapertura">Preapertura</option>
+              <option value="primera-hora">Primera hora</option>
+              <option value="midday">Midday</option>
+              <option value="power-hour">Power Hour</option>
+              <option value="after-hours">After-hours</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="tagging-trend">Tendencia</label>
+            <select id="tagging-trend">
+              <option value="">— Sin definir —</option>
+              <option value="alcista">Alcista</option>
+              <option value="lateral">Lateral</option>
+              <option value="bajista">Bajista</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="tagging-adherence">Adherencia al plan</label>
+            <select id="tagging-adherence">
+              <option value="">— Sin definir —</option>
+              <option value="1">1 · Improvisé</option>
+              <option value="2">2</option>
+              <option value="3">3 · Mitad</option>
+              <option value="4">4</option>
+              <option value="5">5 · Lo seguí al pie</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group full-width">
+          <label>Errores</label>
+          <div class="chip-multiselect" id="tagging-mistakes-chips"></div>
+        </div>
+        <div class="form-group full-width">
+          <label>Aplicar a todos los siguientes (apply-all)</label>
+          <label class="checkbox-inline"><input type="checkbox" id="tagging-apply-all"> Usa estos mismos valores para los trades restantes y cierra.</label>
+        </div>
+        <div class="form-actions">
+          <button type="button" class="btn" id="tagging-skip">Saltar este</button>
+          <button type="button" class="btn btn-primary" id="tagging-next">Guardar y siguiente</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: GESTIONAR TAGS -->
+  <div class="modal-overlay" id="tag-manager-modal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="tag-manager-title">Gestionar setups</h3>
+        <button class="modal-close" id="tag-manager-close">&times;</button>
+      </div>
+      <div class="tag-manager-body">
+        <ul id="tag-manager-list" class="tag-list"></ul>
+        <div class="form-row">
+          <input type="text" id="tag-manager-new" placeholder="Añadir nueva entrada...">
+          <button type="button" class="btn btn-primary" id="tag-manager-add">Añadir</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- LIGHTBOX -->
   <div class="lightbox" id="lightbox">
     <button class="lightbox-close">&times;</button>
@@ -905,6 +1104,6 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
   <script src="js/firebase-config.js?v=30"></script>
-  <script src="js/app.js?v=48"></script>
+  <script src="js/app.js?v=49"></script>
 </body>
 </html>

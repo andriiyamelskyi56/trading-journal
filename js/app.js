@@ -418,6 +418,7 @@ document.querySelectorAll('.nav-links a').forEach(link => {
     refreshAll();
     if (section === 'markets' && activeWatchlistId) fetchQuotes();
     if (section === 'charts') populateChartSymbols();
+    if (section === 'edge') renderEdgeSection();
     if (section === 'dashboard' || section === 'mochilas') startLivePolling();
     else stopLivePolling();
   });
@@ -778,6 +779,7 @@ function openModal(trade = null) {
 
   renderUploadPreview('preview-pre', pendingFilesPre, existingScreensPre);
   renderUploadPreview('preview-post', pendingFilesPost, existingScreensPost);
+  populateTradeEdgeFields(trade);
   modal.classList.add('open');
 }
 
@@ -825,6 +827,7 @@ form.addEventListener('submit', async (e) => {
       notes: document.getElementById('trade-notes-pre').value.trim(),
       screenshotsPre: [...existingScreensPre],
       screenshotsPost: [...existingScreensPost],
+      ...readTradeEdgeFields(),
     };
 
     // Calculate Risk in $
@@ -966,10 +969,14 @@ function renderTradesTable() {
       if (risk > 0 && reward > 0) rrText = `1:${(reward / risk).toFixed(1)}`;
     }
 
+    const setupCell = t.setup
+      ? `<span class="setup-chip">${escapeHtml(t.setup)}</span>`
+      : '<span class="setup-empty">—</span>';
     return `
     <tr class="trade-row trade-row-${t.result}" data-trade-id="${t.id}">
       <td>${formatDate(t.date)}</td>
       <td><strong>${escapeHtml(t.asset)}</strong></td>
+      <td>${setupCell}</td>
       <td><span class="badge badge-${t.direction}">${t.direction.toUpperCase()}</span></td>
       <td>${t.entry}</td>
       <td>${t.sl || '-'}</td>
@@ -2687,16 +2694,23 @@ async function syncIbkr() {
 
     setIbkrMsg(`Importando ${toImport.length} registro(s)...`, 'working');
     let saved = 0;
+    const savedIds = [];
     for (const trade of toImport) {
       const dataToSave = { ...trade };
       dataToSave.createdAt = firebase.firestore.FieldValue.serverTimestamp();
       dataToSave.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
-      await userTradesRef().add(dataToSave);
+      const ref = await userTradesRef().add(dataToSave);
+      savedIds.push(ref.id);
       saved++;
     }
     ibkrConfig.lastSync = new Date().toISOString();
     localStorage.setItem('ibkr_last_sync', ibkrConfig.lastSync);
-    setIbkrMsg(`✓ ${saved} importados${skipped ? `, ${skipped} ya existían` : ''}.`, 'success');
+    setIbkrMsg(`✓ ${saved} importados${skipped ? `, ${skipped} ya existían` : ''}. Etiqueta los trades para construir tu edge.`, 'success');
+    // Launch the tagging wizard once tradesCache has the new docs. The
+    // onSnapshot listener that syncs tradesCache is async, so wait a bit.
+    if (savedIds.length) {
+      setTimeout(() => openTaggingWizard(savedIds), 600);
+    }
   } catch (err) {
     setIbkrMsg(err.message || 'Error al sincronizar con IBKR', 'error');
   } finally {
@@ -4544,4 +4558,344 @@ function stopLivePolling() {
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) stopLivePolling();
   else startLivePolling();
+});
+
+// ==================== EDGE / TAGGING ====================
+// Per-trade metadata for edge discovery: setup, session, market trend,
+// volatility, mistakes (multi), plan adherence (1-5), catalyst.
+// Setups and mistakes are user-defined lists stored in localStorage.
+
+const DEFAULT_MISTAKES = [
+  'FOMO',
+  'SL movido',
+  'Sin plan',
+  'Chasing',
+  'Salida prematura',
+  'Oversize',
+  'Ignorar setup',
+  'Revenge trading',
+];
+const SESSION_LABELS = {
+  'preapertura': 'Preapertura',
+  'primera-hora': 'Primera hora',
+  'midday': 'Midday',
+  'power-hour': 'Power Hour',
+  'after-hours': 'After-hours',
+};
+const TREND_LABELS = { 'alcista': 'Alcista', 'lateral': 'Lateral', 'bajista': 'Bajista' };
+const VOL_LABELS = { 'alta': 'Alta', 'media': 'Media', 'baja': 'Baja' };
+const ADHERENCE_LABELS = { '1': '1 · Improvisé', '2': '2', '3': '3 · Mitad', '4': '4', '5': '5 · Lo seguí al pie' };
+
+function getSetups() {
+  try { return JSON.parse(localStorage.getItem('tj_setups') || '[]'); }
+  catch { return []; }
+}
+function saveSetups(list) {
+  localStorage.setItem('tj_setups', JSON.stringify(list));
+}
+function getMistakes() {
+  try {
+    const raw = localStorage.getItem('tj_mistakes');
+    if (!raw) { saveMistakes(DEFAULT_MISTAKES); return [...DEFAULT_MISTAKES]; }
+    return JSON.parse(raw);
+  } catch { return [...DEFAULT_MISTAKES]; }
+}
+function saveMistakes(list) {
+  localStorage.setItem('tj_mistakes', JSON.stringify(list));
+}
+
+function populateSelect(sel, items, current, placeholder = '— Sin definir —') {
+  if (!sel) return;
+  sel.innerHTML = `<option value="">${placeholder}</option>` +
+    items.map(s => `<option value="${escapeHtml(s)}"${s === current ? ' selected' : ''}>${escapeHtml(s)}</option>`).join('');
+}
+
+function renderMistakeChips(containerId, selected) {
+  const box = document.getElementById(containerId);
+  if (!box) return;
+  const all = getMistakes();
+  box.innerHTML = all.map(m => {
+    const isOn = selected.includes(m);
+    return `<button type="button" class="chip${isOn ? ' chip-on' : ''}" data-mistake="${escapeHtml(m)}">${escapeHtml(m)}</button>`;
+  }).join('') || '<span class="chip-empty">Sin errores definidos. Añade algunos en "Gestionar errores".</span>';
+  box.querySelectorAll('[data-mistake]').forEach(btn => {
+    btn.addEventListener('click', () => btn.classList.toggle('chip-on'));
+  });
+}
+
+function readMistakeChips(containerId) {
+  return Array.from(document.querySelectorAll(`#${containerId} .chip.chip-on`))
+    .map(b => b.dataset.mistake);
+}
+
+// Wire the trade-modal "Edge" tab when openModal runs / form submits.
+function populateTradeEdgeFields(trade) {
+  populateSelect(document.getElementById('trade-setup'), getSetups(), trade?.setup || '');
+  document.getElementById('trade-session').value = trade?.session || '';
+  document.getElementById('trade-trend').value = trade?.marketTrend || '';
+  document.getElementById('trade-volatility').value = trade?.volatility || '';
+  document.getElementById('trade-adherence').value = trade?.planAdherence != null ? String(trade.planAdherence) : '';
+  document.getElementById('trade-catalyst').value = trade?.catalyst || '';
+  renderMistakeChips('trade-mistakes-chips', trade?.mistakes || []);
+}
+
+function readTradeEdgeFields() {
+  const adh = document.getElementById('trade-adherence').value;
+  return {
+    setup: document.getElementById('trade-setup').value || null,
+    session: document.getElementById('trade-session').value || null,
+    marketTrend: document.getElementById('trade-trend').value || null,
+    volatility: document.getElementById('trade-volatility').value || null,
+    planAdherence: adh ? parseInt(adh) : null,
+    catalyst: document.getElementById('trade-catalyst').value.trim() || null,
+    mistakes: readMistakeChips('trade-mistakes-chips'),
+  };
+}
+
+// "+" button next to setup select adds a new setup via prompt.
+document.getElementById('trade-setup-add')?.addEventListener('click', () => {
+  const name = prompt('Nuevo setup (ej. ORB, VWAP reclaim, Gap fill):');
+  if (!name) return;
+  const list = getSetups();
+  if (!list.includes(name)) { list.push(name); saveSetups(list); }
+  populateSelect(document.getElementById('trade-setup'), list, name);
+});
+document.getElementById('trade-mistake-add')?.addEventListener('click', () => {
+  const name = prompt('Nuevo error (ej. "Entré sin confirmación"):');
+  if (!name) return;
+  const list = getMistakes();
+  if (!list.includes(name)) { list.push(name); saveMistakes(list); }
+  renderMistakeChips('trade-mistakes-chips', readMistakeChips('trade-mistakes-chips').concat(name));
+});
+
+// ---- Tag manager modal (used by Edge section buttons) ----
+let tagManagerKind = 'setups';
+function openTagManager(kind) {
+  tagManagerKind = kind;
+  document.getElementById('tag-manager-title').textContent =
+    kind === 'setups' ? 'Gestionar setups' : 'Gestionar errores';
+  renderTagManagerList();
+  document.getElementById('tag-manager-modal').classList.add('open');
+}
+function renderTagManagerList() {
+  const ul = document.getElementById('tag-manager-list');
+  const list = tagManagerKind === 'setups' ? getSetups() : getMistakes();
+  ul.innerHTML = list.length
+    ? list.map((t, i) => `<li><span>${escapeHtml(t)}</span><button type="button" class="btn btn-sm btn-delete" data-tag-del="${i}">Eliminar</button></li>`).join('')
+    : '<li class="tag-empty">Lista vacía.</li>';
+  ul.querySelectorAll('[data-tag-del]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const list2 = tagManagerKind === 'setups' ? getSetups() : getMistakes();
+      list2.splice(parseInt(btn.dataset.tagDel), 1);
+      tagManagerKind === 'setups' ? saveSetups(list2) : saveMistakes(list2);
+      renderTagManagerList();
+    });
+  });
+}
+document.getElementById('tag-manager-close')?.addEventListener('click', () => {
+  document.getElementById('tag-manager-modal').classList.remove('open');
+});
+document.getElementById('tag-manager-modal')?.addEventListener('click', (e) => {
+  if (e.target.id === 'tag-manager-modal') {
+    document.getElementById('tag-manager-modal').classList.remove('open');
+  }
+});
+document.getElementById('tag-manager-add')?.addEventListener('click', () => {
+  const input = document.getElementById('tag-manager-new');
+  const v = input.value.trim();
+  if (!v) return;
+  const list = tagManagerKind === 'setups' ? getSetups() : getMistakes();
+  if (!list.includes(v)) {
+    list.push(v);
+    tagManagerKind === 'setups' ? saveSetups(list) : saveMistakes(list);
+  }
+  input.value = '';
+  renderTagManagerList();
+});
+document.getElementById('edge-manage-setups')?.addEventListener('click', () => openTagManager('setups'));
+document.getElementById('edge-manage-mistakes')?.addEventListener('click', () => openTagManager('mistakes'));
+
+// ---- Edge pivot table ----
+function tradeGroupValue(t, groupBy) {
+  switch (groupBy) {
+    case 'setup': return t.setup || '— Sin etiqueta —';
+    case 'session': return t.session ? (SESSION_LABELS[t.session] || t.session) : '— Sin etiqueta —';
+    case 'trend': return t.marketTrend ? (TREND_LABELS[t.marketTrend] || t.marketTrend) : '— Sin etiqueta —';
+    case 'volatility': return t.volatility ? (VOL_LABELS[t.volatility] || t.volatility) : '— Sin etiqueta —';
+    case 'adherence': return t.planAdherence != null ? (ADHERENCE_LABELS[String(t.planAdherence)] || String(t.planAdherence)) : '— Sin etiqueta —';
+    case 'mistake': return t.mistakes && t.mistakes.length ? t.mistakes : ['— Sin etiqueta —'];
+    default: return '— Sin etiqueta —';
+  }
+}
+
+function tradeRiskMultiple(t) {
+  if (!t.risk || t.risk <= 0 || t.pnl == null) return null;
+  return t.pnl / t.risk;
+}
+
+function renderEdgeSection() {
+  const groupBy = document.getElementById('edge-groupby').value;
+  document.getElementById('edge-th-group').textContent =
+    ({ setup: 'Setup', session: 'Sesión', trend: 'Tendencia', volatility: 'Volatilidad', adherence: 'Adherencia', mistake: 'Error' })[groupBy];
+
+  const closed = getTrades().filter(t => t.result === 'win' || t.result === 'loss' || t.result === 'breakeven');
+  const groups = new Map();
+  for (const t of closed) {
+    const keys = groupBy === 'mistake' ? tradeGroupValue(t, 'mistake') : [tradeGroupValue(t, groupBy)];
+    for (const key of keys) {
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(t);
+    }
+  }
+
+  const rows = [];
+  for (const [key, ts] of groups.entries()) {
+    const n = ts.length;
+    const wins = ts.filter(t => t.result === 'win').length;
+    const losses = ts.filter(t => t.result === 'loss').length;
+    const winRate = n ? wins / n : 0;
+    const pnlTotal = ts.reduce((s, t) => s + (t.pnl || 0), 0);
+    const avgWin = wins ? ts.filter(t => t.result === 'win').reduce((s, t) => s + (t.pnl || 0), 0) / wins : 0;
+    const avgLoss = losses ? ts.filter(t => t.result === 'loss').reduce((s, t) => s + (t.pnl || 0), 0) / losses : 0;
+    const expectancy = winRate * avgWin + (1 - winRate) * avgLoss;
+    const rs = ts.map(tradeRiskMultiple).filter(r => r != null);
+    const avgR = rs.length ? rs.reduce((s, r) => s + r, 0) / rs.length : null;
+    const best = Math.max(...ts.map(t => t.pnl || 0));
+    const worst = Math.min(...ts.map(t => t.pnl || 0));
+    rows.push({ key, n, winRate, pnlTotal, expectancy, avgR, best, worst });
+  }
+
+  rows.sort((a, b) => b.expectancy - a.expectancy);
+
+  const tbody = document.getElementById('edge-table-body');
+  const emptyEl = document.getElementById('edge-empty');
+  if (!rows.length) {
+    tbody.innerHTML = '';
+    emptyEl.style.display = '';
+  } else {
+    emptyEl.style.display = 'none';
+    tbody.innerHTML = rows.map(r => {
+      const pnlClass = r.pnlTotal >= 0 ? 'positive' : 'negative';
+      const expClass = r.expectancy >= 0 ? 'positive' : 'negative';
+      return `<tr>
+        <td><strong>${escapeHtml(r.key)}</strong></td>
+        <td>${r.n}</td>
+        <td>${(r.winRate * 100).toFixed(0)}%</td>
+        <td class="${pnlClass}">${r.pnlTotal >= 0 ? '+' : ''}$${r.pnlTotal.toFixed(2)}</td>
+        <td class="${expClass}">${r.expectancy >= 0 ? '+' : ''}$${r.expectancy.toFixed(2)}</td>
+        <td>${r.avgR != null ? r.avgR.toFixed(2) + 'R' : '-'}</td>
+        <td class="positive">+$${r.best.toFixed(2)}</td>
+        <td class="negative">$${r.worst.toFixed(2)}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  // Summary cards
+  const totalClosed = closed.length;
+  const totalPnl = closed.reduce((s, t) => s + (t.pnl || 0), 0);
+  const tagged = closed.filter(t => t.setup || (t.mistakes && t.mistakes.length)).length;
+  const coverage = totalClosed ? Math.round((tagged / totalClosed) * 100) : 0;
+  document.getElementById('edge-summary-cards').innerHTML = `
+    <div class="card"><span class="card-label">Operaciones cerradas</span><span class="card-value">${totalClosed}</span></div>
+    <div class="card"><span class="card-label">Etiquetadas</span><span class="card-value">${tagged} <small style="font-size:14px;color:var(--text-muted);">(${coverage}%)</small></span></div>
+    <div class="card card-pnl"><span class="card-label">P&L total</span><span class="card-value ${totalPnl >= 0 ? 'positive' : 'negative'}">${totalPnl >= 0 ? '+' : ''}$${totalPnl.toFixed(2)}</span></div>
+    <div class="card"><span class="card-label">Categorías encontradas</span><span class="card-value">${rows.length}</span></div>
+  `;
+}
+
+document.getElementById('edge-groupby')?.addEventListener('change', renderEdgeSection);
+
+// ---- Wizard de tagging post-IBKR ----
+let taggingQueue = [];   // trade objects to tag, in order
+let taggingIndex = 0;
+let taggingApplyAll = null; // when set, apply same payload to remaining
+
+async function openTaggingWizard(tradeIds) {
+  taggingQueue = tradeIds
+    .map(id => tradesCache.find(t => t.id === id))
+    .filter(Boolean);
+  if (!taggingQueue.length) return;
+  taggingIndex = 0;
+  taggingApplyAll = null;
+  document.getElementById('tagging-modal').classList.add('open');
+  renderTaggingStep();
+}
+
+function renderTaggingStep() {
+  const total = taggingQueue.length;
+  const t = taggingQueue[taggingIndex];
+  if (!t) { closeTaggingWizard(); return; }
+  document.getElementById('tagging-progress-text').textContent = `${taggingIndex + 1} / ${total}`;
+  document.getElementById('tagging-progress-fill').style.width = `${((taggingIndex + 1) / total) * 100}%`;
+  document.getElementById('tagging-trade-card').innerHTML = `
+    <div class="tagging-trade-summary">
+      <div><span class="tagging-label">Activo</span><strong>${escapeHtml(t.asset || '—')}</strong></div>
+      <div><span class="tagging-label">Fecha</span>${formatDate(t.date)}</div>
+      <div><span class="tagging-label">Dir</span><span class="badge badge-${t.direction}">${(t.direction || '').toUpperCase()}</span></div>
+      <div><span class="tagging-label">Qty</span>${t.quantity || '-'}</div>
+      <div><span class="tagging-label">Entry → Exit</span>${t.entry || '-'} → ${t.exit || '-'}</div>
+      <div><span class="tagging-label">P&L</span><span class="${(t.pnl || 0) >= 0 ? 'positive' : 'negative'}">${(t.pnl || 0) >= 0 ? '+' : ''}$${(t.pnl || 0).toFixed(2)}</span></div>
+    </div>
+  `;
+  populateSelect(document.getElementById('tagging-setup'), getSetups(), t.setup || '');
+  document.getElementById('tagging-session').value = t.session || '';
+  document.getElementById('tagging-trend').value = t.marketTrend || '';
+  document.getElementById('tagging-adherence').value = t.planAdherence != null ? String(t.planAdherence) : '';
+  renderMistakeChips('tagging-mistakes-chips', t.mistakes || []);
+  document.getElementById('tagging-apply-all').checked = false;
+}
+
+function readTaggingPayload() {
+  const adh = document.getElementById('tagging-adherence').value;
+  return {
+    setup: document.getElementById('tagging-setup').value || null,
+    session: document.getElementById('tagging-session').value || null,
+    marketTrend: document.getElementById('tagging-trend').value || null,
+    planAdherence: adh ? parseInt(adh) : null,
+    mistakes: readMistakeChips('tagging-mistakes-chips'),
+  };
+}
+
+async function applyTaggingPayload(trade, payload) {
+  const patch = { ...payload, updatedAt: firebase.firestore.FieldValue.serverTimestamp() };
+  await userTradesRef().doc(trade.id).update(patch);
+  Object.assign(trade, payload);
+}
+
+async function advanceTaggingWizard(payload) {
+  const t = taggingQueue[taggingIndex];
+  if (!t) return;
+  try {
+    if (payload) await applyTaggingPayload(t, payload);
+  } catch (err) {
+    alert('Error guardando etiquetas: ' + err.message);
+    return;
+  }
+  if (taggingApplyAll) {
+    for (let i = taggingIndex + 1; i < taggingQueue.length; i++) {
+      try { await applyTaggingPayload(taggingQueue[i], taggingApplyAll); } catch (err) { console.error(err); }
+    }
+    closeTaggingWizard();
+    return;
+  }
+  taggingIndex++;
+  if (taggingIndex >= taggingQueue.length) { closeTaggingWizard(); return; }
+  renderTaggingStep();
+}
+
+function closeTaggingWizard() {
+  document.getElementById('tagging-modal').classList.remove('open');
+  taggingQueue = [];
+  taggingIndex = 0;
+  taggingApplyAll = null;
+  renderTradesTable();
+  if (document.getElementById('edge')?.classList.contains('active')) renderEdgeSection();
+}
+
+document.getElementById('tagging-close')?.addEventListener('click', closeTaggingWizard);
+document.getElementById('tagging-skip')?.addEventListener('click', () => advanceTaggingWizard(null));
+document.getElementById('tagging-next')?.addEventListener('click', () => {
+  const payload = readTaggingPayload();
+  if (document.getElementById('tagging-apply-all').checked) taggingApplyAll = payload;
+  advanceTaggingWizard(payload);
 });

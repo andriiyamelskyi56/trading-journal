@@ -2405,3 +2405,98 @@ body.chart-fullscreen-active { overflow: hidden; }
 ::-webkit-scrollbar-track { background: var(--bg); }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+/* ==================== EDGE / TAGGING ==================== */
+.edge-help, .edge-intro {
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.5;
+  margin-bottom: 16px;
+}
+.edge-toolbar { display: flex; gap: 12px; align-items: center; }
+.edge-toolbar label {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 13px; color: var(--text-muted);
+}
+.edge-toolbar select {
+  padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--bg-card); color: var(--text); font-size: 13px;
+}
+.edge-empty {
+  color: var(--text-muted); padding: 24px; text-align: center;
+  background: var(--bg-card); border-radius: var(--radius);
+  border: 1px dashed var(--border); margin-top: 16px;
+}
+
+.select-with-add { display: flex; gap: 4px; }
+.select-with-add select { flex: 1; }
+
+.chip-multiselect {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  padding: 8px; min-height: 40px;
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.chip {
+  padding: 4px 10px; border-radius: 14px;
+  background: transparent; color: var(--text-muted);
+  border: 1px solid var(--border); font-size: 12px;
+  cursor: pointer; transition: all 0.15s;
+}
+.chip:hover { color: var(--text); }
+.chip-on {
+  background: var(--red-bg); color: var(--red);
+  border-color: var(--red);
+}
+.chip-empty { color: var(--text-muted); font-size: 12px; }
+
+.setup-chip {
+  display: inline-block; padding: 2px 8px; border-radius: 4px;
+  background: var(--accent); color: #fff; font-size: 11px;
+  font-weight: 600;
+}
+.setup-empty { color: var(--text-muted); font-size: 11px; }
+
+/* Tagging wizard */
+.tagging-body { padding: 16px 4px 4px; }
+.tagging-help {
+  color: var(--text-muted); font-size: 12px;
+  line-height: 1.5; margin-bottom: 14px;
+}
+.tagging-progress { margin-bottom: 14px; }
+#tagging-progress-text {
+  display: block; font-size: 11px; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;
+}
+.tagging-progress-bar {
+  height: 4px; background: var(--border); border-radius: 2px; overflow: hidden;
+}
+.tagging-progress-bar > div {
+  height: 100%; background: var(--accent); transition: width 0.2s;
+}
+.tagging-trade-card {
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 12px; margin-bottom: 14px;
+}
+.tagging-trade-summary {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
+  font-size: 13px;
+}
+.tagging-label {
+  display: block; font-size: 10px; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px;
+}
+.checkbox-inline {
+  display: flex; align-items: center; gap: 8px;
+  color: var(--text-muted); font-size: 13px;
+}
+
+/* Tag manager */
+.tag-manager-body { padding: 4px 0; }
+.tag-list { list-style: none; padding: 0; margin: 0 0 16px; }
+.tag-list li {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 12px; border-bottom: 1px solid var(--border);
+}
+.tag-list li:last-child { border-bottom: none; }
+.tag-empty { color: var(--text-muted); font-size: 12px; padding: 12px; }
