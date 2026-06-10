@@ -732,14 +732,16 @@ function renderLightboxInfo(t) {
     ['P&amp;L', `<span class="${pnlClass}">${pnlStr}</span>`],
     ['Resultado', `<span class="badge badge-${t.result}">${resultLabel(t.result)}</span>`],
   ];
-  const notesPre = t.notesPre || t.notes || '';
+  const scenario = t.notesPre || t.notes || '';
+  const entryConditions = t.entryConditions || '';
   const notesPost = t.notesPost || '';
   const fieldsHtml = fields.map(([k, v]) => `<div class="lb-field"><span class="lb-label">${k}</span><span class="lb-value">${v}</span></div>`).join('');
-  const notesHtml = (notesPre || notesPost) ? `
-    ${notesPre ? `<div class="lb-notes"><h4>Notas Pre</h4><p>${escapeHtml(notesPre)}</p></div>` : ''}
-    ${notesPost ? `<div class="lb-notes"><h4>Notas Post</h4><p>${escapeHtml(notesPost)}</p></div>` : ''}
-  ` : '';
-  return `<div class="lb-info-grid">${fieldsHtml}</div>${notesHtml}`;
+  const blocks = [
+    scenario && `<div class="lb-notes"><h4>Escenario</h4><p>${escapeHtml(scenario)}</p></div>`,
+    entryConditions && `<div class="lb-notes"><h4>Condiciones de entrada</h4><p>${escapeHtml(entryConditions)}</p></div>`,
+    notesPost && `<div class="lb-notes"><h4>Notas Post</h4><p>${escapeHtml(notesPost)}</p></div>`,
+  ].filter(Boolean).join('');
+  return `<div class="lb-info-grid">${fieldsHtml}</div>${blocks}`;
 }
 
 function lightboxStep(delta) {
@@ -801,6 +803,7 @@ function openModal(trade = null) {
     document.getElementById('trade-sl').value = trade.sl || '';
     document.getElementById('trade-tp').value = trade.tp || '';
     document.getElementById('trade-notes-pre').value = trade.notesPre || trade.notes || '';
+    document.getElementById('trade-entry-conditions').value = trade.entryConditions || '';
     document.getElementById('trade-notes-post').value = trade.notesPost || '';
 
     if (trade.result === 'open') {
@@ -860,6 +863,7 @@ form.addEventListener('submit', async (e) => {
       pnl: 0,
       result: document.getElementById('trade-result').value || '',
       notesPre: document.getElementById('trade-notes-pre').value.trim(),
+      entryConditions: document.getElementById('trade-entry-conditions').value.trim(),
       notesPost: document.getElementById('trade-notes-post').value.trim(),
       notes: document.getElementById('trade-notes-pre').value.trim(),
       screenshotsPre: [...existingScreensPre],
