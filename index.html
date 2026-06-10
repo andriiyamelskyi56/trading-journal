@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Trading Journal</title>
-  <link rel="stylesheet" href="css/styles.css?v=55">
+  <link rel="stylesheet" href="css/styles.css?v=56">
 </head>
 <body>
   <!-- PANTALLA DE AUTH -->
@@ -497,8 +497,12 @@
             </div>
           </div>
           <div class="form-group full-width">
-            <label for="trade-notes-pre">Notas Pre-Trade</label>
-            <textarea id="trade-notes-pre" rows="2" placeholder="Plan, analisis, razon de entrada..."></textarea>
+            <label for="trade-notes-pre">Escenario</label>
+            <textarea id="trade-notes-pre" rows="2" placeholder="Contexto de mercado, narrativa, qué esperabas que pasara..."></textarea>
+          </div>
+          <div class="form-group full-width">
+            <label for="trade-entry-conditions">Condiciones de entrada</label>
+            <textarea id="trade-entry-conditions" rows="2" placeholder="Disparador concreto: ruptura, vela X, confirmación Y..."></textarea>
           </div>
           <div class="form-group full-width">
             <label>Capturas Pre-Trade</label>
@@ -664,6 +668,6 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
   <script src="js/firebase-config.js?v=30"></script>
-  <script src="js/app.js?v=55"></script>
+  <script src="js/app.js?v=56"></script>
 </body>
 </html>
