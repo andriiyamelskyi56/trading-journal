@@ -344,8 +344,14 @@ function subscribeTrades() {
 function getTrades() {
   return tradesCache.map(t => {
     const trade = { ...t };
-    if (trade.result === 'loss' && trade.risk > 0) {
-      trade.pnl = -trade.risk;
+    if (trade.result === 'loss') {
+      // Una pérdida nunca puede sumar en positivo: usa el P&L guardado
+      // forzado a negativo, o -riesgo si no hay P&L registrado.
+      if (typeof trade.pnl === 'number' && trade.pnl !== 0) {
+        trade.pnl = -Math.abs(trade.pnl);
+      } else if (trade.risk > 0) {
+        trade.pnl = -trade.risk;
+      }
     } else if (trade.result === 'breakeven') {
       trade.pnl = 0;
     } else if (trade.result === 'win') {
@@ -898,6 +904,8 @@ form.addEventListener('submit', async (e) => {
     if (trade.result !== 'open' && pnlVal) {
       // Manual P&L entered by user
       trade.pnl = parseFloat(pnlVal);
+      // En pérdidas el P&L manual se interpreta como magnitud: siempre negativo
+      if (trade.result === 'loss' && trade.pnl > 0) trade.pnl = -trade.pnl;
     } else if (trade.result === 'loss') {
       // Perdedora → P&L = -Riesgo (hit SL)
       trade.pnl = riskAmount > 0 ? -riskAmount : 0;
@@ -2019,8 +2027,8 @@ function renderEdgeSection() {
         <td class="${pnlClass}">${r.pnlTotal >= 0 ? '+' : ''}$${r.pnlTotal.toFixed(2)}</td>
         <td class="${expClass}">${r.expectancy >= 0 ? '+' : ''}$${r.expectancy.toFixed(2)}</td>
         <td>${r.avgR != null ? r.avgR.toFixed(2) + 'R' : '-'}</td>
-        <td class="positive">+$${r.best.toFixed(2)}</td>
-        <td class="negative">$${r.worst.toFixed(2)}</td>
+        <td class="${r.best >= 0 ? 'positive' : 'negative'}">${r.best >= 0 ? '+' : ''}$${r.best.toFixed(2)}</td>
+        <td class="${r.worst >= 0 ? 'positive' : 'negative'}">${r.worst >= 0 ? '+' : ''}$${r.worst.toFixed(2)}</td>
       </tr>`;
     }).join('');
   }
