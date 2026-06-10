@@ -980,9 +980,10 @@ function renderTradesTable() {
     });
   });
 
-  // Double-click to edit
+  // Click anywhere on the row to edit (image thumbs and action buttons
+  // stopPropagation on their own clicks so they keep their behaviour).
   tbody.querySelectorAll('.trade-row').forEach(row => {
-    row.addEventListener('dblclick', () => {
+    row.addEventListener('click', () => {
       const trade = tradesCache.find(t => t.id === row.dataset.tradeId);
       if (trade) openModal(trade);
     });
