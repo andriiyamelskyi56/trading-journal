@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Trading Journal</title>
-  <link rel="stylesheet" href="css/styles.css?v=54">
+  <link rel="stylesheet" href="css/styles.css?v=55">
 </head>
 <body>
   <!-- PANTALLA DE AUTH -->
@@ -646,8 +646,14 @@
 
   <!-- LIGHTBOX -->
   <div class="lightbox" id="lightbox">
-    <button class="lightbox-close">&times;</button>
-    <img id="lightbox-img" src="" alt="Captura">
+    <button class="lightbox-close" id="lightbox-close-btn">&times;</button>
+    <aside class="lightbox-info" id="lightbox-info"></aside>
+    <button class="lightbox-nav lightbox-prev" id="lightbox-prev" aria-label="Anterior">&#10094;</button>
+    <div class="lightbox-img-wrap">
+      <img id="lightbox-img" src="" alt="Captura">
+      <div class="lightbox-counter" id="lightbox-counter"></div>
+    </div>
+    <button class="lightbox-nav lightbox-next" id="lightbox-next" aria-label="Siguiente">&#10095;</button>
   </div>
 
   <!-- TradingView Lightweight Charts -->
@@ -658,6 +664,6 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
   <script src="js/firebase-config.js?v=30"></script>
-  <script src="js/app.js?v=54"></script>
+  <script src="js/app.js?v=55"></script>
 </body>
 </html>
