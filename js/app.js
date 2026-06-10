@@ -734,11 +734,13 @@ function renderLightboxInfo(t) {
   ];
   const scenario = t.notesPre || t.notes || '';
   const entryConditions = t.entryConditions || '';
+  const actualScenario = t.actualScenario || '';
   const notesPost = t.notesPost || '';
   const fieldsHtml = fields.map(([k, v]) => `<div class="lb-field"><span class="lb-label">${k}</span><span class="lb-value">${v}</span></div>`).join('');
   const blocks = [
     scenario && `<div class="lb-notes"><h4>Escenario</h4><p>${escapeHtml(scenario)}</p></div>`,
     entryConditions && `<div class="lb-notes"><h4>Condiciones de entrada</h4><p>${escapeHtml(entryConditions)}</p></div>`,
+    actualScenario && `<div class="lb-notes"><h4>Escenario real</h4><p>${escapeHtml(actualScenario)}</p></div>`,
     notesPost && `<div class="lb-notes"><h4>Notas Post</h4><p>${escapeHtml(notesPost)}</p></div>`,
   ].filter(Boolean).join('');
   return `<div class="lb-info-grid">${fieldsHtml}</div>${blocks}`;
@@ -804,6 +806,7 @@ function openModal(trade = null) {
     document.getElementById('trade-tp').value = trade.tp || '';
     document.getElementById('trade-notes-pre').value = trade.notesPre || trade.notes || '';
     document.getElementById('trade-entry-conditions').value = trade.entryConditions || '';
+    document.getElementById('trade-actual-scenario').value = trade.actualScenario || '';
     document.getElementById('trade-notes-post').value = trade.notesPost || '';
 
     if (trade.result === 'open') {
@@ -864,6 +867,7 @@ form.addEventListener('submit', async (e) => {
       result: document.getElementById('trade-result').value || '',
       notesPre: document.getElementById('trade-notes-pre').value.trim(),
       entryConditions: document.getElementById('trade-entry-conditions').value.trim(),
+      actualScenario: document.getElementById('trade-actual-scenario').value.trim(),
       notesPost: document.getElementById('trade-notes-post').value.trim(),
       notes: document.getElementById('trade-notes-pre').value.trim(),
       screenshotsPre: [...existingScreensPre],
