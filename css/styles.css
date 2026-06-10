@@ -1122,27 +1122,96 @@ a { color: var(--accent); text-decoration: none; }
 .lightbox {
   display: none;
   position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: rgba(0, 0, 0, 0.9);
+  inset: 0;
+  background: rgba(0, 0, 0, 0.92);
   z-index: 2000;
+  align-items: stretch;
   justify-content: center;
-  align-items: center;
-  cursor: pointer;
+  padding: 24px;
+  gap: 16px;
+  cursor: default;
 }
 
-.lightbox.open {
+.lightbox.open { display: flex; }
+
+.lightbox-info {
+  flex: 0 0 320px;
+  max-width: 360px;
+  background: rgba(20, 20, 28, 0.85);
+  border-radius: 10px;
+  padding: 20px;
+  overflow-y: auto;
+  color: #e6e6ec;
+  font-size: 13px;
+  align-self: stretch;
+}
+
+.lb-info-grid { display: grid; gap: 10px; }
+
+.lb-field {
   display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.lb-label { color: var(--text-muted); font-weight: 500; }
+.lb-value { font-weight: 600; text-align: right; word-break: break-word; }
+
+.lb-notes { margin-top: 16px; }
+.lb-notes h4 {
+  font-size: 12px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 0 0 6px;
+}
+.lb-notes p { margin: 0; white-space: pre-wrap; line-height: 1.5; }
+
+.lightbox-img-wrap {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  min-width: 0;
 }
 
 .lightbox img {
-  max-width: 95vw;
+  max-width: 100%;
   max-height: 95vh;
   object-fit: contain;
   border-radius: 8px;
 }
+
+.lightbox-counter {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  letter-spacing: 0.5px;
+}
+
+.lightbox-nav {
+  flex: 0 0 auto;
+  align-self: center;
+  background: rgba(255, 255, 255, 0.08);
+  border: none;
+  color: #fff;
+  font-size: 22px;
+  width: 44px;
+  height: 64px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.lightbox-nav:hover { background: rgba(255, 255, 255, 0.18); }
 
 .lightbox-close {
   position: absolute;
@@ -1154,6 +1223,12 @@ a { color: var(--accent); text-decoration: none; }
   font-size: 36px;
   cursor: pointer;
   z-index: 2001;
+}
+
+@media (max-width: 800px) {
+  .lightbox { flex-direction: column; padding: 12px; }
+  .lightbox-info { flex: 0 0 auto; max-width: none; max-height: 35vh; }
+  .lightbox-nav { width: 64px; height: 40px; }
 }
 
 /* ==================== TRADE THUMBNAILS (table & calendar) ==================== */

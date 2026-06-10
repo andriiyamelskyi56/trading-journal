@@ -577,12 +577,14 @@ function renderUploadPreview(previewId, pendingArray, existingUrls = []) {
   const preview = document.getElementById(previewId);
   preview.innerHTML = '';
 
+  const galleryUrls = [...existingUrls, ...pendingArray.map(p => p.dataUrl)];
+
   existingUrls.forEach((url, i) => {
     const thumb = document.createElement('div');
     thumb.className = 'upload-thumb';
     const img = document.createElement('img');
     img.src = url;
-    img.addEventListener('click', (e) => { e.stopPropagation(); openLightbox(url); });
+    img.addEventListener('click', (e) => { e.stopPropagation(); openLightbox(galleryUrls, i); });
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'upload-thumb-remove';
@@ -598,7 +600,7 @@ function renderUploadPreview(previewId, pendingArray, existingUrls = []) {
     thumb.className = 'upload-thumb';
     const img = document.createElement('img');
     img.src = entry.dataUrl;
-    img.addEventListener('click', (e) => { e.stopPropagation(); openLightbox(entry.dataUrl); });
+    img.addEventListener('click', (e) => { e.stopPropagation(); openLightbox(galleryUrls, existingUrls.length + i); });
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'upload-thumb-remove';
@@ -682,20 +684,87 @@ async function uploadPendingFiles(files, userId) {
 }
 
 // ==================== LIGHTBOX ====================
-function openLightbox(src) {
-  const lb = document.getElementById('lightbox');
-  document.getElementById('lightbox-img').src = src;
-  lb.classList.add('open');
+let lightboxImages = [];
+let lightboxIndex = 0;
+let lightboxTrade = null;
+
+function openLightbox(srcOrImages, index = 0, trade = null) {
+  lightboxImages = Array.isArray(srcOrImages) ? srcOrImages.filter(Boolean) : [srcOrImages];
+  lightboxIndex = Math.max(0, Math.min(index, lightboxImages.length - 1));
+  lightboxTrade = trade;
+  renderLightbox();
+  document.getElementById('lightbox').classList.add('open');
+}
+
+function renderLightbox() {
+  const total = lightboxImages.length;
+  document.getElementById('lightbox-img').src = lightboxImages[lightboxIndex] || '';
+  const counter = document.getElementById('lightbox-counter');
+  counter.textContent = total > 1 ? `${lightboxIndex + 1} / ${total}` : '';
+  counter.style.display = total > 1 ? '' : 'none';
+  const showNav = total > 1;
+  document.getElementById('lightbox-prev').style.display = showNav ? '' : 'none';
+  document.getElementById('lightbox-next').style.display = showNav ? '' : 'none';
+  document.getElementById('lightbox-info').innerHTML = lightboxTrade ? renderLightboxInfo(lightboxTrade) : '';
+  document.getElementById('lightbox-info').style.display = lightboxTrade ? '' : 'none';
+}
+
+function renderLightboxInfo(t) {
+  const pnl = Number(t.pnl) || 0;
+  const pnlClass = pnl > 0 ? 'positive' : pnl < 0 ? 'negative' : '';
+  const pnlStr = `${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}`;
+  const rrPlan = (t.entry && t.sl && t.tp) ? (() => {
+    const risk = t.direction === 'long' ? t.entry - t.sl : t.sl - t.entry;
+    const reward = t.direction === 'long' ? t.tp - t.entry : t.entry - t.tp;
+    return (risk > 0 && reward > 0) ? `1 : ${(reward / risk).toFixed(2)}` : '—';
+  })() : '—';
+  const fields = [
+    ['Fecha', formatDate(t.date)],
+    ['Activo', escapeHtml(t.asset || '—')],
+    ['Setup', t.setup ? `<span class="setup-chip">${escapeHtml(t.setup)}</span>` : '—'],
+    ['Dirección', `<span class="badge badge-${t.direction}">${(t.direction || '').toUpperCase()}</span>`],
+    ['Cantidad', t.quantity ?? '—'],
+    ['Entrada', t.entry ?? '—'],
+    ['Stop Loss', t.sl ?? '—'],
+    ['Take Profit', t.tp ?? '—'],
+    ['Salida', t.exit ?? '—'],
+    ['RR planeado', rrPlan],
+    ['P&amp;L', `<span class="${pnlClass}">${pnlStr}</span>`],
+    ['Resultado', `<span class="badge badge-${t.result}">${resultLabel(t.result)}</span>`],
+  ];
+  const notesPre = t.notesPre || t.notes || '';
+  const notesPost = t.notesPost || '';
+  const fieldsHtml = fields.map(([k, v]) => `<div class="lb-field"><span class="lb-label">${k}</span><span class="lb-value">${v}</span></div>`).join('');
+  const notesHtml = (notesPre || notesPost) ? `
+    ${notesPre ? `<div class="lb-notes"><h4>Notas Pre</h4><p>${escapeHtml(notesPre)}</p></div>` : ''}
+    ${notesPost ? `<div class="lb-notes"><h4>Notas Post</h4><p>${escapeHtml(notesPost)}</p></div>` : ''}
+  ` : '';
+  return `<div class="lb-info-grid">${fieldsHtml}</div>${notesHtml}`;
+}
+
+function lightboxStep(delta) {
+  if (lightboxImages.length < 2) return;
+  lightboxIndex = (lightboxIndex + delta + lightboxImages.length) % lightboxImages.length;
+  renderLightbox();
+}
+
+function closeLightbox() {
+  document.getElementById('lightbox').classList.remove('open');
 }
 
 document.getElementById('lightbox').addEventListener('click', (e) => {
-  if (e.target.tagName !== 'IMG') {
-    document.getElementById('lightbox').classList.remove('open');
-  }
+  if (e.target.id === 'lightbox') closeLightbox();
 });
+document.getElementById('lightbox-close-btn').addEventListener('click', closeLightbox);
+document.getElementById('lightbox-prev').addEventListener('click', (e) => { e.stopPropagation(); lightboxStep(-1); });
+document.getElementById('lightbox-next').addEventListener('click', (e) => { e.stopPropagation(); lightboxStep(1); });
 
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') document.getElementById('lightbox').classList.remove('open');
+  const lb = document.getElementById('lightbox');
+  if (!lb.classList.contains('open')) return;
+  if (e.key === 'Escape') closeLightbox();
+  else if (e.key === 'ArrowLeft') lightboxStep(-1);
+  else if (e.key === 'ArrowRight') lightboxStep(1);
 });
 
 // ==================== OPEN / CLOSE MODAL ====================
@@ -967,7 +1036,7 @@ function renderTradesTable() {
       const idx = parseInt(img.dataset.imgIdx);
       if (allScreens[idx]) {
         img.src = allScreens[idx];
-        img.addEventListener('click', (e) => { e.stopPropagation(); openLightbox(allScreens[idx]); });
+        img.addEventListener('click', (e) => { e.stopPropagation(); openLightbox(allScreens, idx, trade); });
       }
     }
   });
@@ -1516,7 +1585,7 @@ function renderWeekView() {
       const idx = parseInt(img.dataset.imgIdx);
       if (allScreens[idx]) {
         img.src = allScreens[idx];
-        img.addEventListener('click', (e) => { e.stopPropagation(); openLightbox(allScreens[idx]); });
+        img.addEventListener('click', (e) => { e.stopPropagation(); openLightbox(allScreens, idx, trade); });
       }
     }
   });
