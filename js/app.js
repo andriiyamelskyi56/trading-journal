@@ -717,39 +717,78 @@ function renderLightbox() {
 
 function renderLightboxInfo(t) {
   const pnl = Number(t.pnl) || 0;
-  const pnlClass = pnl > 0 ? 'positive' : pnl < 0 ? 'negative' : '';
+  const pnlClass = pnl > 0 ? 'positive' : pnl < 0 ? 'negative' : 'neutral';
   const pnlStr = `${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}`;
   const rrPlan = (t.entry && t.sl && t.tp) ? (() => {
     const risk = t.direction === 'long' ? t.entry - t.sl : t.sl - t.entry;
     const reward = t.direction === 'long' ? t.tp - t.entry : t.entry - t.tp;
     return (risk > 0 && reward > 0) ? `1 : ${(reward / risk).toFixed(2)}` : '—';
   })() : '—';
+  const rMultiple = (t.risk > 0 && t.result && t.result !== 'open')
+    ? `${pnl >= 0 ? '+' : ''}${(pnl / t.risk).toFixed(2)}R` : null;
+
+  const head = `
+    <div class="lb-head">
+      <div class="lb-head-top">
+        <span class="lb-asset">${escapeHtml(t.asset || '—')}</span>
+        <span class="badge badge-${t.direction}">${(t.direction || '').toUpperCase()}</span>
+        <span class="badge badge-${t.result}">${resultLabel(t.result)}</span>
+      </div>
+      <div class="lb-head-sub">
+        <span>${formatDate(t.date)}</span>
+        ${t.setup ? `<span class="setup-chip">${escapeHtml(t.setup)}</span>` : ''}
+      </div>
+    </div>`;
+
+  const hero = `
+    <div class="lb-pnl">
+      <div><span class="lb-pnl-label">P&amp;L</span><span class="lb-pnl-value ${pnlClass}">${pnlStr}</span></div>
+      ${rMultiple ? `<span class="lb-pnl-r ${pnlClass}">${rMultiple}</span>` : ''}
+    </div>`;
+
+  const lvl = (label, val, cls = '') =>
+    `<div class="lb-level"><span class="lb-level-label">${label}</span><span class="lb-level-value ${cls}">${val ?? '—'}</span></div>`;
+  const levels = `
+    <div class="lb-levels">
+      ${lvl('Entrada', t.entry)}
+      ${lvl('Salida', t.exit)}
+      ${lvl('Stop Loss', t.sl, 'negative')}
+      ${lvl('Take Profit', t.tp, 'positive')}
+    </div>`;
+
   const fields = [
-    ['Fecha', formatDate(t.date)],
-    ['Activo', escapeHtml(t.asset || '—')],
-    ['Setup', t.setup ? `<span class="setup-chip">${escapeHtml(t.setup)}</span>` : '—'],
-    ['Dirección', `<span class="badge badge-${t.direction}">${(t.direction || '').toUpperCase()}</span>`],
     ['Cantidad', t.quantity ?? '—'],
-    ['Entrada', t.entry ?? '—'],
-    ['Stop Loss', t.sl ?? '—'],
-    ['Take Profit', t.tp ?? '—'],
-    ['Salida', t.exit ?? '—'],
+    ['Riesgo', t.risk > 0 ? `$${t.risk.toFixed(2)}` : '—'],
     ['RR planeado', rrPlan],
-    ['P&amp;L', `<span class="${pnlClass}">${pnlStr}</span>`],
-    ['Resultado', `<span class="badge badge-${t.result}">${resultLabel(t.result)}</span>`],
   ];
+  const fieldsHtml = `<div class="lb-info-grid">${fields.map(([k, v]) =>
+    `<div class="lb-field"><span class="lb-label">${k}</span><span class="lb-value">${v}</span></div>`).join('')}</div>`;
+
+  const ctxChips = [
+    t.session && (SESSION_LABELS[t.session] || t.session),
+    t.marketTrend && (TREND_LABELS[t.marketTrend] || t.marketTrend),
+    t.volatility && `Vol. ${(VOL_LABELS[t.volatility] || t.volatility).toLowerCase()}`,
+    t.planAdherence != null && `Plan ${t.planAdherence}/5`,
+    t.catalyst,
+  ].filter(Boolean);
+  const mistakes = t.mistakes || [];
+  const context = (ctxChips.length || mistakes.length) ? `
+    <div class="lb-context">
+      ${ctxChips.map(c => `<span class="lb-chip">${escapeHtml(c)}</span>`).join('')}
+      ${mistakes.map(m => `<span class="lb-chip lb-chip-mistake">${escapeHtml(m)}</span>`).join('')}
+    </div>` : '';
+
   const scenario = t.notesPre || t.notes || '';
   const entryConditions = t.entryConditions || '';
   const actualScenario = t.actualScenario || '';
   const notesPost = t.notesPost || '';
-  const fieldsHtml = fields.map(([k, v]) => `<div class="lb-field"><span class="lb-label">${k}</span><span class="lb-value">${v}</span></div>`).join('');
   const blocks = [
     scenario && `<div class="lb-notes"><h4>Escenario</h4><p>${escapeHtml(scenario)}</p></div>`,
     entryConditions && `<div class="lb-notes"><h4>Condiciones de entrada</h4><p>${escapeHtml(entryConditions)}</p></div>`,
     actualScenario && `<div class="lb-notes"><h4>Escenario real</h4><p>${escapeHtml(actualScenario)}</p></div>`,
     notesPost && `<div class="lb-notes"><h4>Notas Post</h4><p>${escapeHtml(notesPost)}</p></div>`,
   ].filter(Boolean).join('');
-  return `<div class="lb-info-grid">${fieldsHtml}</div>${blocks}`;
+  return `${head}${hero}${levels}${fieldsHtml}${context}${blocks}`;
 }
 
 function lightboxStep(delta) {
