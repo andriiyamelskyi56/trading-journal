@@ -1054,6 +1054,19 @@ a { color: var(--accent); text-decoration: none; }
   color: #fff;
 }
 
+/* When Plan is selected, fade the post-trade controls so it's clear they
+   don't apply yet. The "¿encajó?" select stays interactive on purpose. */
+.modal-tab-content.plan-mode .form-group input:disabled,
+.modal-tab-content.plan-mode .form-group select:disabled,
+.modal-tab-content.plan-mode .form-group textarea:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.modal-tab-content.plan-mode .upload-zone.disabled {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
 /* ==================== RR DISPLAY ==================== */
 .rr-display, .rr-actual {
   padding: 8px 12px;
