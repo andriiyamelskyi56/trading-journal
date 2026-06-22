@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Trading Journal</title>
-  <link rel="stylesheet" href="css/styles.css?v=58">
+  <link rel="stylesheet" href="css/styles.css?v=59">
 </head>
 <body>
   <!-- PANTALLA DE AUTH -->
@@ -583,6 +583,14 @@
 
         <!-- TAB: RESULTADO -->
         <div class="modal-tab-content" id="tab-result">
+          <div class="form-group full-width">
+            <label>¿Esto es solo un plan o una operación ejecutada?</label>
+            <div class="kind-toggle" id="trade-kind-toggle">
+              <button type="button" class="kind-btn active" data-kind="operation">Operación</button>
+              <button type="button" class="kind-btn" data-kind="plan">Plan</button>
+            </div>
+            <input type="hidden" id="trade-kind" value="operation">
+          </div>
           <div class="form-group full-width scenario-match-group">
             <label for="trade-scenario-match">¿El instrumento encajó en tu escenario?</label>
             <select id="trade-scenario-match">
@@ -680,6 +688,6 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
   <script src="js/firebase-config.js?v=30"></script>
-  <script src="js/app.js?v=58"></script>
+  <script src="js/app.js?v=59"></script>
 </body>
 </html>

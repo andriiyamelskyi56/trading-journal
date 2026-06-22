@@ -1029,6 +1029,31 @@ a { color: var(--accent); text-decoration: none; }
 .modal-tab-content { display: none; }
 .modal-tab-content.active { display: block; }
 
+/* ==================== KIND TOGGLE (Plan / Operación) ==================== */
+.kind-toggle {
+  display: inline-flex;
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--bg-card);
+}
+.kind-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  padding: 8px 18px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.kind-btn:hover { color: var(--text); }
+.kind-btn.active {
+  background: var(--accent);
+  color: #fff;
+}
+
 /* ==================== RR DISPLAY ==================== */
 .rr-display, .rr-actual {
   padding: 8px 12px;
