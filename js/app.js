@@ -722,7 +722,9 @@ function renderLightboxInfo(t) {
     t.scenarioMatch === 'match' ? '<span class="badge badge-win">Encajó</span>' :
     t.scenarioMatch === 'miss' ? '<span class="badge badge-loss">Plan fallido</span>' :
     '—';
+  const kind = t.kind === 'plan' ? '<span class="badge badge-open">Plan</span>' : '<span class="badge badge-win">Operación</span>';
   const fields = [
+    ['Tipo', kind],
     ['Fecha', formatDate(t.date)],
     ['Activo', escapeHtml(t.asset || '—')],
     ['Setup', t.setup ? `<span class="setup-chip">${escapeHtml(t.setup)}</span>` : '—'],
@@ -776,10 +778,23 @@ document.addEventListener('keydown', (e) => {
   else if (e.key === 'ArrowRight') lightboxStep(1);
 });
 
+// ==================== KIND TOGGLE ====================
+function setTradeKind(kind) {
+  const k = kind === 'plan' ? 'plan' : 'operation';
+  document.getElementById('trade-kind').value = k;
+  document.querySelectorAll('#trade-kind-toggle .kind-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.kind === k);
+  });
+}
+document.querySelectorAll('#trade-kind-toggle .kind-btn').forEach(btn => {
+  btn.addEventListener('click', () => setTradeKind(btn.dataset.kind));
+});
+
 // ==================== OPEN / CLOSE MODAL ====================
 function openModal(trade = null) {
   editingTradeId = null;
   form.reset();
+  setTradeKind('operation');
   pendingFilesPre = [];
   pendingFilesPost = [];
   existingScreensPre = [];
@@ -813,6 +828,7 @@ function openModal(trade = null) {
     document.getElementById('trade-entry-conditions').value = trade.entryConditions || '';
     document.getElementById('trade-actual-scenario').value = trade.actualScenario || '';
     document.getElementById('trade-scenario-match').value = trade.scenarioMatch || '';
+    setTradeKind(trade.kind || 'operation');
     document.getElementById('trade-notes-post').value = trade.notesPost || '';
 
     if (trade.result === 'open') {
@@ -875,6 +891,7 @@ form.addEventListener('submit', async (e) => {
       entryConditions: document.getElementById('trade-entry-conditions').value.trim(),
       actualScenario: document.getElementById('trade-actual-scenario').value.trim(),
       scenarioMatch: document.getElementById('trade-scenario-match').value,
+      kind: document.getElementById('trade-kind').value || 'operation',
       notesPost: document.getElementById('trade-notes-post').value.trim(),
       notes: document.getElementById('trade-notes-pre').value.trim(),
       screenshotsPre: [...existingScreensPre],
