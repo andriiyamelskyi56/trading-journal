@@ -736,7 +736,7 @@ function renderLightboxInfo(t) {
     ['Salida', t.exit ?? '—'],
     ['RR planeado', rrPlan],
     ['P&amp;L', `<span class="${pnlClass}">${pnlStr}</span>`],
-    ['Resultado', `<span class="badge badge-${t.result}">${resultLabel(t.result)}</span>`],
+    ['Resultado', t.kind === 'plan' ? '<span class="badge badge-open">Plan</span>' : `<span class="badge badge-${t.result}">${resultLabel(t.result)}</span>`],
     ['Escenario', scenarioBadge],
   ];
   const scenario = t.notesPre || t.notes || '';
@@ -779,12 +779,39 @@ document.addEventListener('keydown', (e) => {
 });
 
 // ==================== KIND TOGGLE ====================
+// In Plan mode the post-trade fields don't apply yet (the trade hasn't been
+// taken), so we disable them and clear their values. The "¿encajó?" select
+// stays enabled but optional.
+const PLAN_DISABLED_IDS = ['trade-exit', 'trade-pnl', 'trade-result', 'trade-actual-scenario', 'trade-notes-post', 'file-post'];
+
+function applyKindMode(k) {
+  const isPlan = k === 'plan';
+  const resultTab = document.getElementById('tab-result');
+  if (resultTab) resultTab.classList.toggle('plan-mode', isPlan);
+  PLAN_DISABLED_IDS.forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.disabled = isPlan;
+    if (isPlan && el.tagName !== 'SELECT') el.value = '';
+  });
+  const resultSel = document.getElementById('trade-result');
+  if (resultSel) {
+    if (isPlan) resultSel.value = '';
+    else if (!resultSel.value) resultSel.value = 'win';
+  }
+  const rrActual = document.getElementById('trade-rr-actual');
+  if (rrActual) rrActual.textContent = isPlan ? 'Plan' : (rrActual.textContent === 'Plan' ? '--' : rrActual.textContent);
+  const uploadPost = document.getElementById('upload-post');
+  if (uploadPost) uploadPost.classList.toggle('disabled', isPlan);
+}
+
 function setTradeKind(kind) {
   const k = kind === 'plan' ? 'plan' : 'operation';
   document.getElementById('trade-kind').value = k;
   document.querySelectorAll('#trade-kind-toggle .kind-btn').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.kind === k);
   });
+  applyKindMode(k);
 }
 document.querySelectorAll('#trade-kind-toggle .kind-btn').forEach(btn => {
   btn.addEventListener('click', () => setTradeKind(btn.dataset.kind));
@@ -911,8 +938,17 @@ form.addEventListener('submit', async (e) => {
     }
     trade.risk = riskAmount;
 
-    // Result is always set by the user
-    trade.result = document.getElementById('trade-result').value || 'breakeven';
+    // Plan entries don't have a post-trade result yet; leave it blank so the
+    // UI can render "Plan" instead of a P&L badge.
+    if (trade.kind === 'plan') {
+      trade.result = '';
+      trade.pnl = 0;
+      trade.exit = null;
+      trade.actualScenario = '';
+      trade.notesPost = '';
+    } else {
+      trade.result = document.getElementById('trade-result').value || 'breakeven';
+    }
 
     if (trade.result === 'open') {
       trade.pnl = 0;
@@ -1047,11 +1083,11 @@ function renderTradesTable() {
       <td>${t.entry}</td>
       <td>${t.sl || '-'}</td>
       <td>${t.tp || '-'}</td>
-      <td>${t.exit || '-'}</td>
+      <td>${t.kind === 'plan' ? '-' : (t.exit || '-')}</td>
       <td>${rrText}</td>
       <td class="negative">${t.risk ? '-$' + t.risk.toFixed(2) : '-'}</td>
-      <td class="pnl ${(t.pnl || 0) >= 0 ? 'positive' : 'negative'}">${(t.pnl || 0) >= 0 ? '+' : ''}$${(t.pnl || 0).toFixed(2)}</td>
-      <td><span class="badge badge-${t.result}">${resultLabel(t.result)}</span></td>
+      <td class="pnl ${(t.pnl || 0) >= 0 ? 'positive' : 'negative'}">${t.kind === 'plan' ? '—' : ((t.pnl || 0) >= 0 ? '+' : '') + '$' + (t.pnl || 0).toFixed(2)}</td>
+      <td>${t.kind === 'plan' ? '<span class="badge badge-open">Plan</span>' : `<span class="badge badge-${t.result}">${resultLabel(t.result)}</span>`}</td>
       <td>${thumbsHtml}</td>
       <td class="actions-cell">
         <button class="btn btn-sm btn-edit" data-edit-id="${t.id}" onclick="event.stopPropagation()">Editar</button>
