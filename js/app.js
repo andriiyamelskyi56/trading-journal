@@ -718,6 +718,10 @@ function renderLightboxInfo(t) {
     const reward = t.direction === 'long' ? t.tp - t.entry : t.entry - t.tp;
     return (risk > 0 && reward > 0) ? `1 : ${(reward / risk).toFixed(2)}` : '—';
   })() : '—';
+  const scenarioBadge =
+    t.scenarioMatch === 'match' ? '<span class="badge badge-win">Encajó</span>' :
+    t.scenarioMatch === 'miss' ? '<span class="badge badge-loss">Plan fallido</span>' :
+    '—';
   const fields = [
     ['Fecha', formatDate(t.date)],
     ['Activo', escapeHtml(t.asset || '—')],
@@ -731,6 +735,7 @@ function renderLightboxInfo(t) {
     ['RR planeado', rrPlan],
     ['P&amp;L', `<span class="${pnlClass}">${pnlStr}</span>`],
     ['Resultado', `<span class="badge badge-${t.result}">${resultLabel(t.result)}</span>`],
+    ['Escenario', scenarioBadge],
   ];
   const scenario = t.notesPre || t.notes || '';
   const entryConditions = t.entryConditions || '';
@@ -807,6 +812,7 @@ function openModal(trade = null) {
     document.getElementById('trade-notes-pre').value = trade.notesPre || trade.notes || '';
     document.getElementById('trade-entry-conditions').value = trade.entryConditions || '';
     document.getElementById('trade-actual-scenario').value = trade.actualScenario || '';
+    document.getElementById('trade-scenario-match').value = trade.scenarioMatch || '';
     document.getElementById('trade-notes-post').value = trade.notesPost || '';
 
     if (trade.result === 'open') {
@@ -868,6 +874,7 @@ form.addEventListener('submit', async (e) => {
       notesPre: document.getElementById('trade-notes-pre').value.trim(),
       entryConditions: document.getElementById('trade-entry-conditions').value.trim(),
       actualScenario: document.getElementById('trade-actual-scenario').value.trim(),
+      scenarioMatch: document.getElementById('trade-scenario-match').value,
       notesPost: document.getElementById('trade-notes-post').value.trim(),
       notes: document.getElementById('trade-notes-pre').value.trim(),
       screenshotsPre: [...existingScreensPre],
