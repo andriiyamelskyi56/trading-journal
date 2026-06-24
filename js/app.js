@@ -353,6 +353,8 @@ function getTrades() {
     } else if (trade.result === 'open') {
       const cached = openPnlCache[trade.id];
       trade.pnl = cached ? cached.pnl : 0;
+    } else if (trade.result === 'noentry') {
+      trade.pnl = 0;
     }
     if (typeof trade.pnl !== 'number') trade.pnl = 0;
     return trade;
@@ -508,10 +510,10 @@ function calcRRActual() {
 
 document.getElementById('trade-exit').addEventListener('input', calcRRActual);
 
-// Hide the exit/PnL row when the trade is still open.
+// Hide the exit/PnL row when the trade is still open or never entered.
 document.getElementById('trade-result').addEventListener('change', (e) => {
-  const isOpen = e.target.value === 'open';
-  document.getElementById('trade-exit').closest('.form-row').style.display = isOpen ? 'none' : '';
+  const hide = e.target.value === 'open' || e.target.value === 'noentry';
+  document.getElementById('trade-exit').closest('.form-row').style.display = hide ? 'none' : '';
 });
 
 // ==================== CLOUDINARY CONFIG ====================
@@ -858,7 +860,7 @@ function openModal(trade = null) {
     setTradeKind(trade.kind || 'operation');
     document.getElementById('trade-notes-post').value = trade.notesPost || '';
 
-    if (trade.result === 'open') {
+    if (trade.result === 'open' || trade.result === 'noentry') {
       document.getElementById('trade-exit').closest('.form-row').style.display = 'none';
     }
 
@@ -950,12 +952,12 @@ form.addEventListener('submit', async (e) => {
       trade.result = document.getElementById('trade-result').value || 'breakeven';
     }
 
-    if (trade.result === 'open') {
+    if (trade.result === 'open' || trade.result === 'noentry') {
       trade.pnl = 0;
     }
 
     // Calculate P&L — resultado determines the P&L logic
-    if (trade.result !== 'open' && pnlVal) {
+    if (trade.result !== 'open' && trade.result !== 'noentry' && pnlVal) {
       // Manual P&L entered by user
       trade.pnl = parseFloat(pnlVal);
     } else if (trade.result === 'loss') {
@@ -1303,6 +1305,7 @@ function renderEquityChart(sortedTrades) {
   const dailyPnl = {};
   sortedTrades.forEach(t => {
     if (t.result === 'open') return; // open positions handled via historical cache
+    if (t.result === 'noentry') return; // sin entrar → no afecta a la curva de equity
     const day = t.date;
     dailyPnl[day] = (dailyPnl[day] || 0) + (t.pnl || 0);
   });
@@ -1869,7 +1872,7 @@ function formatDate(dateStr) {
 }
 
 function resultLabel(result) {
-  return { win: 'Ganadora', loss: 'Perdedora', breakeven: 'Breakeven', open: 'Abierta' }[result] || result;
+  return { win: 'Ganadora', loss: 'Perdedora', breakeven: 'Breakeven', open: 'Abierta', noentry: 'Sin entrar' }[result] || result;
 }
 
 function escapeHtml(text) {
