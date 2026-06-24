@@ -1048,11 +1048,26 @@ function renderTradesTable() {
   const tbody = document.getElementById('trades-table-body');
   let trades = getTrades();
 
+  populateSetupFilter(trades);
+
   const filterAsset = document.getElementById('filter-asset').value.toUpperCase().trim();
   const filterResult = document.getElementById('filter-result').value;
+  const filterSetup = document.getElementById('filter-setup').value;
 
   if (filterAsset) trades = trades.filter(t => t.asset.includes(filterAsset));
-  if (filterResult) trades = trades.filter(t => t.result === filterResult);
+  if (filterResult) {
+    if (filterResult === 'plan') {
+      // Sólo planes (operaciones aún no ejecutadas).
+      trades = trades.filter(t => t.kind === 'plan');
+    } else {
+      // win/loss/breakeven/open aplican a operaciones reales, no a planes.
+      trades = trades.filter(t => t.kind !== 'plan' && t.result === filterResult);
+    }
+  }
+  if (filterSetup) {
+    if (filterSetup === '__none__') trades = trades.filter(t => !t.setup);
+    else trades = trades.filter(t => t.setup === filterSetup);
+  }
 
   trades.sort((a, b) => new Date(b.date) - new Date(a.date));
 
@@ -1128,8 +1143,26 @@ function renderTradesTable() {
   });
 }
 
+// Rellena el selector de setup con la unión de la lista editable y los
+// setups que ya aparecen en operaciones, conservando la selección actual.
+function populateSetupFilter(trades) {
+  const sel = document.getElementById('filter-setup');
+  if (!sel) return;
+  const current = sel.value;
+  const used = trades.filter(t => t.setup).map(t => t.setup);
+  const names = [...new Set([...getSetups(), ...used])].sort((a, b) =>
+    a.localeCompare(b, 'es', { sensitivity: 'base' }));
+  const hasUntagged = trades.some(t => !t.setup);
+  sel.innerHTML = `<option value="">Todos los setups</option>` +
+    names.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('') +
+    (hasUntagged ? `<option value="__none__">Sin setup</option>` : '');
+  // Restaura la selección si la opción sigue existiendo.
+  sel.value = [...sel.options].some(o => o.value === current) ? current : '';
+}
+
 document.getElementById('filter-asset').addEventListener('input', renderTradesTable);
 document.getElementById('filter-result').addEventListener('change', renderTradesTable);
+document.getElementById('filter-setup').addEventListener('change', renderTradesTable);
 
 // ==================== DASHBOARD ====================
 function renderDashboard() {

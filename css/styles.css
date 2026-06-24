@@ -263,6 +263,7 @@ a { color: var(--accent); text-decoration: none; }
 /* ==================== FILTERS ==================== */
 .filters {
   display: flex;
+  flex-wrap: wrap;
   gap: 12px;
   margin-bottom: 16px;
 }
