@@ -295,6 +295,18 @@
           <select id="filter-setup">
             <option value="">Todos los setups</option>
           </select>
+          <select id="filter-period">
+            <option value="">Todo el tiempo</option>
+            <option value="1d">Hoy (1 día)</option>
+            <option value="1w">Última semana</option>
+            <option value="1m">Último mes</option>
+            <option value="custom">Personalizado…</option>
+          </select>
+          <span id="filter-date-range" class="filter-date-range" style="display:none;">
+            <input type="date" id="filter-date-from" title="Desde">
+            <span class="filter-date-sep">→</span>
+            <input type="date" id="filter-date-to" title="Hasta">
+          </span>
         </div>
         <table class="trades-table full-table">
           <thead>

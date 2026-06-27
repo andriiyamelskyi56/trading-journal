@@ -1530,6 +1530,7 @@ function renderTradesTable() {
     if (filterSetup === '__none__') trades = trades.filter(t => !t.setup);
     else trades = trades.filter(t => t.setup === filterSetup);
   }
+  trades = applyPeriodFilter(trades);
 
   trades.sort((a, b) => new Date(b.date) - new Date(a.date));
 
@@ -1621,9 +1622,38 @@ function populateSetupFilter(trades) {
   sel.value = [...sel.options].some(o => o.value === current) ? current : '';
 }
 
+// Filtra por rango temporal: hoy / semana / mes / personalizado.
+function applyPeriodFilter(trades) {
+  const period = document.getElementById('filter-period').value;
+  if (!period) return trades;
+
+  if (period === 'custom') {
+    const fromVal = document.getElementById('filter-date-from').value;
+    const toVal = document.getElementById('filter-date-to').value;
+    return trades.filter(t => {
+      if (!t.date) return false;
+      if (fromVal && t.date < fromVal) return false;
+      if (toVal && t.date > toVal) return false;
+      return true;
+    });
+  }
+
+  const cutoff = new Date();
+  if (period === '1d') cutoff.setDate(cutoff.getDate() - 1);
+  else if (period === '1w') cutoff.setDate(cutoff.getDate() - 7);
+  else if (period === '1m') cutoff.setMonth(cutoff.getMonth() - 1);
+  return trades.filter(t => t.date && new Date(t.date) >= cutoff);
+}
+
 document.getElementById('filter-asset').addEventListener('input', renderTradesTable);
 document.getElementById('filter-result').addEventListener('change', renderTradesTable);
 document.getElementById('filter-setup').addEventListener('change', renderTradesTable);
+document.getElementById('filter-period').addEventListener('change', (e) => {
+  document.getElementById('filter-date-range').style.display = e.target.value === 'custom' ? '' : 'none';
+  renderTradesTable();
+});
+document.getElementById('filter-date-from').addEventListener('change', renderTradesTable);
+document.getElementById('filter-date-to').addEventListener('change', renderTradesTable);
 
 // ==================== DASHBOARD ====================
 function renderDashboard() {
