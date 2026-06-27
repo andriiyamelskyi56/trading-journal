@@ -283,6 +283,17 @@ a { color: var(--accent); text-decoration: none; }
   border-color: var(--accent);
 }
 
+.filter-date-range { display: inline-flex; align-items: center; gap: 6px; }
+.filter-date-sep { color: var(--text-muted); }
+.filter-date-range input[type="date"] {
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-card);
+  color: var(--text);
+  font-size: 13px;
+}
+
 /* ==================== DASHBOARD CHARTS ==================== */
 .summary-cards-secondary .card {
   border-left: none;
