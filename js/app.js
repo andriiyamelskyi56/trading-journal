@@ -830,7 +830,7 @@ function drawPointerUp() {
   redrawDraw();
 }
 
-function applyDrawing() {
+async function applyDrawing() {
   if (!drawCanvas || !drawTarget) return;
   let dataUrl;
   try {
@@ -839,6 +839,45 @@ function applyDrawing() {
     alert('No se pudo exportar el dibujo (imagen protegida por CORS): ' + err.message);
     return;
   }
+
+  // Caso lightbox: captura de una operación ya guardada → re-subir y persistir.
+  if (drawTarget.kind === 'lightbox') {
+    const saveBtn = document.getElementById('draw-save');
+    const prevText = saveBtn.textContent;
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Guardando...';
+    try {
+      const file = dataURLtoFile(dataUrl, 'anotada.jpg');
+      const newUrl = await uploadToCloudinary(file, currentUser.uid);
+      const trade = tradesCache.find(t => t.id === drawTarget.tradeId);
+      if (trade) {
+        const arrays = ['screenshotsPre', 'screenshotsPost'];
+        for (const key of arrays) {
+          const arr = trade[key] || [];
+          const idx = arr.indexOf(drawTarget.oldUrl);
+          if (idx >= 0) { arr[idx] = newUrl; trade[key] = arr; }
+        }
+        await userTradesRef().doc(trade.id).update({
+          screenshotsPre: trade.screenshotsPre || [],
+          screenshotsPost: trade.screenshotsPost || [],
+        });
+      }
+      // Refresca el lightbox para mostrar la versión anotada.
+      const li = lightboxImages.indexOf(drawTarget.oldUrl);
+      if (li >= 0) lightboxImages[li] = newUrl;
+      renderLightbox();
+    } catch (err) {
+      alert('Error al guardar el dibujo: ' + err.message);
+      saveBtn.disabled = false;
+      saveBtn.textContent = prevText;
+      return;
+    }
+    saveBtn.disabled = false;
+    saveBtn.textContent = prevText;
+    closeDrawEditor();
+    return;
+  }
+
   const isPre = drawTarget.previewId === 'preview-pre';
   const pending = isPre ? pendingFilesPre : pendingFilesPost;
   const existing = isPre ? existingScreensPre : existingScreensPost;
@@ -923,6 +962,9 @@ function renderLightbox() {
   document.getElementById('lightbox-next').style.display = showNav ? '' : 'none';
   document.getElementById('lightbox-info').innerHTML = lightboxTrade ? renderLightboxInfo(lightboxTrade) : '';
   document.getElementById('lightbox-info').style.display = lightboxTrade ? '' : 'none';
+  // Dibujar disponible cuando la captura pertenece a una operación guardada.
+  const drawBtn = document.getElementById('lightbox-draw-btn');
+  if (drawBtn) drawBtn.style.display = (lightboxTrade && lightboxTrade.id && lightboxImages[lightboxIndex]) ? '' : 'none';
 }
 
 function renderLightboxInfo(t) {
@@ -983,6 +1025,12 @@ document.getElementById('lightbox').addEventListener('click', (e) => {
   if (e.target.id === 'lightbox') closeLightbox();
 });
 document.getElementById('lightbox-close-btn').addEventListener('click', closeLightbox);
+document.getElementById('lightbox-draw-btn').addEventListener('click', (e) => {
+  e.stopPropagation();
+  const url = lightboxImages[lightboxIndex];
+  if (!url || !lightboxTrade) return;
+  openDrawEditor(url, { kind: 'lightbox', tradeId: lightboxTrade.id, oldUrl: url });
+});
 document.getElementById('lightbox-prev').addEventListener('click', (e) => { e.stopPropagation(); lightboxStep(-1); });
 document.getElementById('lightbox-next').addEventListener('click', (e) => { e.stopPropagation(); lightboxStep(1); });
 

@@ -1178,7 +1178,7 @@ a { color: var(--accent); text-decoration: none; }
 .upload-thumb-draw:hover { background: var(--accent); }
 
 /* ==================== EDITOR DE DIBUJO ==================== */
-#draw-modal { z-index: 1600; }
+#draw-modal { z-index: 2100; }
 .draw-modal {
   max-width: 1100px;
   width: 96%;
@@ -1349,6 +1349,21 @@ a { color: var(--accent); text-decoration: none; }
   cursor: pointer;
   z-index: 2001;
 }
+
+.lightbox-draw {
+  position: absolute;
+  top: 22px;
+  right: 76px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  color: #fff;
+  font-size: 13px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  z-index: 2001;
+}
+.lightbox-draw:hover { background: var(--accent); border-color: var(--accent); }
 
 @media (max-width: 800px) {
   .lightbox { flex-direction: column; padding: 12px; }
