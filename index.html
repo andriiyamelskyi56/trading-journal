@@ -459,6 +459,13 @@
               <input type="text" id="trade-asset" placeholder="EUR/USD, BTC, AAPL..." required>
             </div>
           </div>
+          <div class="form-group full-width">
+            <label for="trade-setup">Setup / Estrategia</label>
+            <div class="select-with-add">
+              <select id="trade-setup"><option value="">— Sin definir —</option></select>
+              <button type="button" class="btn btn-sm" id="trade-setup-add" title="Añadir setup">+</button>
+            </div>
+          </div>
           <div class="form-row">
             <div class="form-group">
               <label for="trade-direction">Direccion</label>
@@ -522,15 +529,8 @@
 
         <!-- TAB: EDGE -->
         <div class="modal-tab-content" id="tab-edge">
-          <p class="edge-help">Etiqueta cada operación para que más tarde puedas medir qué setup, sesión o condición de mercado tiene esperanza positiva.</p>
+          <p class="edge-help">El setup se asigna en la pestaña <strong>Plan</strong>. Aquí etiquetas el resto del contexto para medir qué condiciones tienen esperanza positiva.</p>
           <div class="form-row">
-            <div class="form-group">
-              <label for="trade-setup">Setup / Estrategia</label>
-              <div class="select-with-add">
-                <select id="trade-setup"><option value="">— Sin definir —</option></select>
-                <button type="button" class="btn btn-sm" id="trade-setup-add" title="Añadir setup">+</button>
-              </div>
-            </div>
             <div class="form-group">
               <label for="trade-session">Sesión / Hora</label>
               <select id="trade-session">
@@ -542,8 +542,6 @@
                 <option value="after-hours">After-hours</option>
               </select>
             </div>
-          </div>
-          <div class="form-row">
             <div class="form-group">
               <label for="trade-trend">Tendencia del mercado</label>
               <select id="trade-trend">
@@ -553,6 +551,8 @@
                 <option value="bajista">Bajista</option>
               </select>
             </div>
+          </div>
+          <div class="form-row">
             <div class="form-group">
               <label for="trade-volatility">Volatilidad</label>
               <select id="trade-volatility">
@@ -562,13 +562,6 @@
                 <option value="baja">Baja</option>
               </select>
             </div>
-          </div>
-          <div class="form-group full-width">
-            <label>Errores cometidos</label>
-            <div class="chip-multiselect" id="trade-mistakes-chips"></div>
-            <button type="button" class="btn btn-sm" id="trade-mistake-add" style="margin-top:6px;">+ Añadir error a la lista</button>
-          </div>
-          <div class="form-row">
             <div class="form-group">
               <label for="trade-adherence">Adherencia al plan (1 = ninguna, 5 = total)</label>
               <select id="trade-adherence">
@@ -580,10 +573,15 @@
                 <option value="5">5 · Lo seguí al pie</option>
               </select>
             </div>
-            <div class="form-group">
-              <label for="trade-catalyst">Catalizador (opcional)</label>
-              <input type="text" id="trade-catalyst" placeholder="Earnings, FOMC, news...">
-            </div>
+          </div>
+          <div class="form-group full-width">
+            <label>Errores cometidos</label>
+            <div class="chip-multiselect" id="trade-mistakes-chips"></div>
+            <button type="button" class="btn btn-sm" id="trade-mistake-add" style="margin-top:6px;">+ Añadir error a la lista</button>
+          </div>
+          <div class="form-group full-width">
+            <label for="trade-catalyst">Catalizador (opcional)</label>
+            <input type="text" id="trade-catalyst" placeholder="Earnings, FOMC, news...">
           </div>
         </div>
 
