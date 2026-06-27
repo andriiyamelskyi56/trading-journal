@@ -835,6 +835,15 @@ function paintShape(s) {
     }
   } else if (s.tool === 'rect') {
     ctx.strokeRect(s.x0, s.y0, s.x1 - s.x0, s.y1 - s.y0);
+  } else if (s.tool === 'text') {
+    ctx.font = `bold ${s.size}px sans-serif`;
+    ctx.textBaseline = 'top';
+    // Halo oscuro para legibilidad sobre cualquier fondo.
+    ctx.lineWidth = Math.max(2, s.size / 8);
+    ctx.strokeStyle = 'rgba(0,0,0,0.7)';
+    ctx.strokeText(s.text, s.x, s.y);
+    ctx.fillStyle = s.color;
+    ctx.fillText(s.text, s.x, s.y);
   }
 }
 
@@ -867,11 +876,18 @@ function distanceToShape(s, p) {
   if (s.tool === 'rect') {
     const a = Math.min(s.x0, s.x1), b = Math.max(s.x0, s.x1), c = Math.min(s.y0, s.y1), d = Math.max(s.y0, s.y1);
     return Math.min(
-      pointSegDist(p.x, p.y, a, c, b, c),
+      pointSegDist(p.x, p.y, a, c, b, c),  // borde superior
       pointSegDist(p.x, p.y, b, c, b, d),
       pointSegDist(p.x, p.y, b, d, a, d),
       pointSegDist(p.x, p.y, a, d, a, c),
     );
+  }
+  if (s.tool === 'text') {
+    drawCtx.font = `bold ${s.size}px sans-serif`;
+    const w = drawCtx.measureText(s.text).width;
+    const dx = Math.max(s.x - p.x, 0, p.x - (s.x + w));
+    const dy = Math.max(s.y - p.y, 0, p.y - (s.y + s.size));
+    return Math.hypot(dx, dy);
   }
   return Infinity;
 }
@@ -887,9 +903,17 @@ function eraseAt(p) {
 function drawPointerDown(e) {
   if (!drawBaseImg) return;
   e.preventDefault();
+  const p = drawPointerPos(e);
+  if (drawTool === 'text') {
+    const txt = prompt('Texto a añadir:');
+    if (txt && txt.trim()) {
+      drawShapes.push({ tool: 'text', color: drawColor, size: Math.max(14, drawWidth * 5), x: p.x, y: p.y, text: txt.trim() });
+      redrawDraw();
+    }
+    return;
+  }
   drawingNow = true;
   drawCanvas.setPointerCapture?.(e.pointerId);
-  const p = drawPointerPos(e);
   if (drawTool === 'eraser') { eraseAt(p); return; }
   if (drawTool === 'pen') {
     drawCurrent = { tool: 'pen', color: drawColor, width: drawWidth, points: [p] };
