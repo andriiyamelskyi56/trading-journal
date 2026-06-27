@@ -1185,29 +1185,31 @@ a { color: var(--accent); text-decoration: none; }
   height: 100vh;
   max-height: 100vh;
   border-radius: 0;
-  padding: 16px 20px;
+  padding: 8px 14px;
   display: flex;
   flex-direction: column;
 }
+.draw-modal .modal-header { margin-bottom: 6px; }
+.draw-modal .form-actions { margin-top: 8px; }
 .draw-toolbar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
-  padding: 10px 0;
+  gap: 8px;
+  padding: 6px 0;
   border-bottom: 1px solid var(--border);
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 .draw-tools { display: flex; gap: 4px; }
 .draw-tool {
-  width: 34px;
-  height: 32px;
+  width: 30px;
+  height: 28px;
   border: 1px solid var(--border);
   background: var(--bg-card);
   color: var(--text);
   border-radius: 6px;
   cursor: pointer;
-  font-size: 15px;
+  font-size: 14px;
 }
 .draw-tool.active { border-color: var(--accent); background: var(--accent); color: #fff; }
 .draw-colors { display: flex; gap: 6px; }
@@ -1236,11 +1238,11 @@ a { color: var(--accent); text-decoration: none; }
     linear-gradient(45deg, #1a1a1a 25%, transparent 25%) 0 0/20px 20px,
     linear-gradient(-45deg, #1a1a1a 25%, transparent 25%) 0 0/20px 20px;
   border-radius: 8px;
-  min-height: 200px;
+  min-height: 120px;
 }
 #draw-canvas {
   max-width: 100%;
-  max-height: calc(100vh - 170px);
+  max-height: calc(100vh - 116px);
   touch-action: none;
   cursor: crosshair;
   background: #000;
