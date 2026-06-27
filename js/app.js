@@ -1036,12 +1036,25 @@ async function applyDrawing() {
 
 // ==================== LIGHTBOX ====================
 let lightboxImages = [];
+let lightboxLabels = [];   // 'pre' | 'post' | '' alineado con lightboxImages
 let lightboxIndex = 0;
 let lightboxTrade = null;
 let lightboxEdit = null;   // { previewId, existingCount } cuando se abre desde el modal
 
-function openLightbox(srcOrImages, index = 0, trade = null, editContext = null) {
-  lightboxImages = Array.isArray(srcOrImages) ? srcOrImages.filter(Boolean) : [srcOrImages];
+// Etiquetas 'pre'/'post' alineadas con [...screenshotsPre, ...screenshotsPost].
+function screenLabels(trade) {
+  const pre = (trade.screenshotsPre || []).map(() => 'pre');
+  const post = (trade.screenshotsPost || []).map(() => 'post');
+  return [...pre, ...post];
+}
+
+function openLightbox(srcOrImages, index = 0, trade = null, editContext = null, labels = null) {
+  const imgs = Array.isArray(srcOrImages) ? srcOrImages : [srcOrImages];
+  const lbls = labels || [];
+  // Filtra vacíos manteniendo las etiquetas alineadas.
+  lightboxImages = [];
+  lightboxLabels = [];
+  imgs.forEach((u, i) => { if (u) { lightboxImages.push(u); lightboxLabels.push(lbls[i] || ''); } });
   lightboxIndex = Math.max(0, Math.min(index, lightboxImages.length - 1));
   lightboxTrade = trade;
   lightboxEdit = editContext;
@@ -1064,6 +1077,16 @@ function renderLightbox() {
   const drawBtn = document.getElementById('lightbox-draw-btn');
   const canDraw = lightboxImages[lightboxIndex] && ((lightboxTrade && lightboxTrade.id) || lightboxEdit);
   if (drawBtn) drawBtn.style.display = canDraw ? '' : 'none';
+
+  // Etiqueta Pre/Post encima de la imagen (no la tapa).
+  const cap = document.getElementById('lightbox-caption');
+  if (cap) {
+    let lab = lightboxLabels[lightboxIndex] || '';
+    if (!lab && lightboxEdit) lab = lightboxEdit.previewId === 'preview-post' ? 'post' : 'pre';
+    cap.className = 'lightbox-caption' + (lab === 'pre' ? ' cap-pre' : lab === 'post' ? ' cap-post' : '');
+    cap.textContent = lab === 'pre' ? 'Antes de entrar · Pre-Trade'
+      : lab === 'post' ? 'Después de la operación · Post-Trade' : '';
+  }
 }
 
 function renderLightboxInfo(t) {
@@ -1503,10 +1526,11 @@ function renderTradesTable() {
     const trade = tradesCache.find(t => t.id === img.dataset.tradeImg);
     if (trade) {
       const allScreens = [...(trade.screenshotsPre || []), ...(trade.screenshotsPost || [])];
+      const labels = screenLabels(trade);
       const idx = parseInt(img.dataset.imgIdx);
       if (allScreens[idx]) {
         img.src = allScreens[idx];
-        img.addEventListener('click', (e) => { e.stopPropagation(); openLightbox(allScreens, idx, trade); });
+        img.addEventListener('click', (e) => { e.stopPropagation(); openLightbox(allScreens, idx, trade, null, labels); });
       }
     }
   });
@@ -2069,10 +2093,11 @@ function renderWeekView() {
     const trade = tradesCache.find(t => t.id === img.dataset.weekImg);
     if (trade) {
       const allScreens = [...(trade.screenshotsPre || []), ...(trade.screenshotsPost || [])];
+      const labels = screenLabels(trade);
       const idx = parseInt(img.dataset.imgIdx);
       if (allScreens[idx]) {
         img.src = allScreens[idx];
-        img.addEventListener('click', (e) => { e.stopPropagation(); openLightbox(allScreens, idx, trade); });
+        img.addEventListener('click', (e) => { e.stopPropagation(); openLightbox(allScreens, idx, trade, null, labels); });
       }
     }
   });
