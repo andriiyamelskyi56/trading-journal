@@ -2012,8 +2012,11 @@ function renderTagManagerList() {
   const ul = document.getElementById('tag-manager-list');
   const list = tagManagerKind === 'setups' ? getSetups() : getMistakes();
   ul.innerHTML = list.length
-    ? list.map((t, i) => `<li><span>${escapeHtml(t)}</span><button type="button" class="btn btn-sm btn-delete" data-tag-del="${i}">Eliminar</button></li>`).join('')
+    ? list.map((t, i) => `<li><span>${escapeHtml(t)}</span><span class="tag-actions"><button type="button" class="btn btn-sm" data-tag-edit="${i}">Editar</button><button type="button" class="btn btn-sm btn-delete" data-tag-del="${i}">Eliminar</button></span></li>`).join('')
     : '<li class="tag-empty">Lista vacía.</li>';
+  ul.querySelectorAll('[data-tag-edit]').forEach(btn => {
+    btn.addEventListener('click', () => renameTag(parseInt(btn.dataset.tagEdit)));
+  });
   ul.querySelectorAll('[data-tag-del]').forEach(btn => {
     btn.addEventListener('click', () => {
       const list2 = tagManagerKind === 'setups' ? getSetups() : getMistakes();
@@ -2022,6 +2025,51 @@ function renderTagManagerList() {
       renderTagManagerList();
     });
   });
+}
+
+// Renombra un setup/error de la lista y propaga el cambio a las operaciones
+// que ya lo usan en Firestore.
+async function renameTag(index) {
+  const list = tagManagerKind === 'setups' ? getSetups() : getMistakes();
+  const oldName = list[index];
+  if (oldName == null) return;
+  const label = tagManagerKind === 'setups' ? 'setup' : 'error';
+  const input = prompt(`Editar ${label}:`, oldName);
+  if (input == null) return;
+  const newName = input.trim();
+  if (!newName || newName === oldName) return;
+  if (list.some((t, i) => i !== index && t === newName)) {
+    alert(`Ya existe un ${label} con ese nombre.`);
+    return;
+  }
+  list[index] = newName;
+  tagManagerKind === 'setups' ? saveSetups(list) : saveMistakes(list);
+  renderTagManagerList();
+  await propagateTagRename(tagManagerKind, oldName, newName);
+}
+
+// Actualiza las operaciones existentes para reflejar el nuevo nombre.
+async function propagateTagRename(kind, oldName, newName) {
+  if (!currentUser) return;
+  try {
+    const updates = [];
+    tradesCache.forEach(t => {
+      if (kind === 'setups') {
+        if (t.setup === oldName) {
+          updates.push(userTradesRef().doc(t.id).update({ setup: newName }));
+        }
+      } else {
+        if (Array.isArray(t.mistakes) && t.mistakes.includes(oldName)) {
+          const next = t.mistakes.map(m => (m === oldName ? newName : m));
+          updates.push(userTradesRef().doc(t.id).update({ mistakes: next }));
+        }
+      }
+    });
+    if (updates.length) await Promise.all(updates);
+  } catch (err) {
+    console.error('Error al renombrar etiqueta en operaciones:', err);
+    alert('El nombre se cambió en la lista, pero no se pudieron actualizar todas las operaciones.');
+  }
 }
 document.getElementById('tag-manager-close')?.addEventListener('click', () => {
   document.getElementById('tag-manager-modal').classList.remove('open');

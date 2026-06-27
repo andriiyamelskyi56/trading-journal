@@ -2614,4 +2614,5 @@ body.chart-fullscreen-active { overflow: hidden; }
   padding: 8px 12px; border-bottom: 1px solid var(--border);
 }
 .tag-list li:last-child { border-bottom: none; }
+.tag-actions { display: flex; gap: 6px; flex-shrink: 0; }
 .tag-empty { color: var(--text-muted); font-size: 12px; padding: 12px; }
