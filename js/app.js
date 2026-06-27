@@ -1151,9 +1151,7 @@ function populateSetupFilter(trades) {
   const sel = document.getElementById('filter-setup');
   if (!sel) return;
   const current = sel.value;
-  const used = trades.filter(t => t.setup).map(t => t.setup);
-  const names = [...new Set([...getSetups(), ...used])].sort((a, b) =>
-    a.localeCompare(b, 'es', { sensitivity: 'base' }));
+  const names = getAllSetups();
   const hasUntagged = trades.some(t => !t.setup);
   sel.innerHTML = `<option value="">Todos los setups</option>` +
     names.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('') +
@@ -1924,6 +1922,16 @@ function getSetups() {
 function saveSetups(list) {
   localStorage.setItem('tj_setups', JSON.stringify(list));
 }
+// Unión de la lista guardada + los setups ya usados en operaciones, ordenada.
+// Es la fuente única que alimenta el desplegable del modal, el filtro de la
+// tabla y el gestor, para que todos muestren exactamente lo mismo y se
+// actualicen automáticamente al añadir o usar un setup nuevo.
+function getAllSetups(extra) {
+  const set = new Set(getSetups());
+  tradesCache.forEach(t => { if (t.setup) set.add(t.setup); });
+  if (extra) set.add(extra);
+  return [...set].sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }));
+}
 function getMistakes() {
   try {
     const raw = localStorage.getItem('tj_mistakes');
@@ -1961,7 +1969,7 @@ function readMistakeChips(containerId) {
 
 // Wire the trade-modal "Edge" tab when openModal runs / form submits.
 function populateTradeEdgeFields(trade) {
-  populateSelect(document.getElementById('trade-setup'), getSetups(), trade?.setup || '');
+  populateSelect(document.getElementById('trade-setup'), getAllSetups(trade?.setup), trade?.setup || '');
   document.getElementById('trade-session').value = trade?.session || '';
   document.getElementById('trade-trend').value = trade?.marketTrend || '';
   document.getElementById('trade-volatility').value = trade?.volatility || '';
@@ -1989,7 +1997,7 @@ document.getElementById('trade-setup-add')?.addEventListener('click', () => {
   if (!name) return;
   const list = getSetups();
   if (!list.includes(name)) { list.push(name); saveSetups(list); }
-  populateSelect(document.getElementById('trade-setup'), list, name);
+  populateSelect(document.getElementById('trade-setup'), getAllSetups(name), name);
 });
 document.getElementById('trade-mistake-add')?.addEventListener('click', () => {
   const name = prompt('Nuevo error (ej. "Entré sin confirmación"):');
@@ -2017,8 +2025,7 @@ function renderTagManagerList() {
     const saved = getSetups();
     const counts = {};
     tradesCache.forEach(t => { if (t.setup) counts[t.setup] = (counts[t.setup] || 0) + 1; });
-    tagManagerSetups = [...new Set([...saved, ...Object.keys(counts)])]
-      .sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }));
+    tagManagerSetups = getAllSetups();
     ul.innerHTML = tagManagerSetups.length
       ? tagManagerSetups.map((name, i) => {
           const n = counts[name] || 0;
