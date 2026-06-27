@@ -567,7 +567,7 @@ function handleFiles(files, previewId, pendingArray) {
     if (!file.type.startsWith('image/')) return;
     const reader = new FileReader();
     reader.onload = (e) => {
-      const entry = { file, dataUrl: e.target.result };
+      const entry = { file, dataUrl: e.target.result, base: e.target.result, shapes: [] };
       pendingArray.push(entry);
       renderUploadPreview(previewId, pendingArray);
     };
@@ -586,13 +586,13 @@ function renderUploadPreview(previewId, pendingArray, existingUrls = []) {
     thumb.className = 'upload-thumb';
     const img = document.createElement('img');
     img.src = url;
-    img.addEventListener('click', (e) => { e.stopPropagation(); openLightbox(galleryUrls, i); });
+    img.addEventListener('click', (e) => { e.stopPropagation(); openLightbox(galleryUrls, i, null, { previewId, existingCount: existingUrls.length }); });
     const drawBtn = document.createElement('button');
     drawBtn.type = 'button';
     drawBtn.className = 'upload-thumb-draw';
     drawBtn.title = 'Dibujar';
     drawBtn.textContent = '\u270f\ufe0f';
-    drawBtn.addEventListener('click', (e) => { e.stopPropagation(); openDrawEditor(url, { kind: 'existing', previewId, index: i }); });
+    drawBtn.addEventListener('click', (e) => { e.stopPropagation(); openDrawEditor({ kind: 'existing', previewId, index: i }); });
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'upload-thumb-remove';
@@ -609,13 +609,13 @@ function renderUploadPreview(previewId, pendingArray, existingUrls = []) {
     thumb.className = 'upload-thumb';
     const img = document.createElement('img');
     img.src = entry.dataUrl;
-    img.addEventListener('click', (e) => { e.stopPropagation(); openLightbox(galleryUrls, existingUrls.length + i); });
+    img.addEventListener('click', (e) => { e.stopPropagation(); openLightbox(galleryUrls, existingUrls.length + i, null, { previewId, existingCount: existingUrls.length }); });
     const drawBtn = document.createElement('button');
     drawBtn.type = 'button';
     drawBtn.className = 'upload-thumb-draw';
     drawBtn.title = 'Dibujar';
     drawBtn.textContent = '\u270f\ufe0f';
-    drawBtn.addEventListener('click', (e) => { e.stopPropagation(); openDrawEditor(entry.dataUrl, { kind: 'pending', previewId, index: i }); });
+    drawBtn.addEventListener('click', (e) => { e.stopPropagation(); openDrawEditor({ kind: 'pending', previewId, index: i }); });
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'upload-thumb-remove';
@@ -681,7 +681,7 @@ document.addEventListener('paste', (e) => {
   imageFiles.forEach(file => {
     const reader = new FileReader();
     reader.onload = (ev) => {
-      pending.push({ file, dataUrl: ev.target.result });
+      pending.push({ file, dataUrl: ev.target.result, base: ev.target.result, shapes: [] });
       renderUploadPreview(previewId, pending, existing);
     };
     reader.readAsDataURL(file);
@@ -697,6 +697,25 @@ async function uploadPendingFiles(files, userId) {
     urls.push(url);
   }
   return urls;
+}
+
+// Sube las capturas pendientes y, para las que tienen anotaciones, sube
+// también su imagen base, devolviendo un mapa urlFinal → { base, shapes }.
+async function uploadPendingEntries(entries, userId) {
+  const urls = [];
+  const annotations = {};
+  for (const entry of entries) {
+    const url = await uploadToCloudinary(entry.file, userId);
+    urls.push(url);
+    if (entry.shapes && entry.shapes.length) {
+      let baseUrl = entry.base;
+      if (!/^https?:/i.test(baseUrl || '')) {
+        baseUrl = await uploadToCloudinary(dataURLtoFile(entry.base, 'base.jpg'), userId);
+      }
+      annotations[url] = { base: baseUrl, shapes: entry.shapes };
+    }
+  }
+  return { urls, annotations };
 }
 
 // ==================== EDITOR DE DIBUJO (tipo Paint) ====================
@@ -720,9 +739,34 @@ function dataURLtoFile(dataUrl, name) {
   return new File([arr], name, { type: mime });
 }
 
-function openDrawEditor(src, target) {
+function isHttpUrl(s) { return /^https?:/i.test(s || ''); }
+
+// Resuelve la imagen BASE (sin anotar) y las formas guardadas de un objetivo.
+// Editar siempre sobre la base permite borrar/deshacer lo dibujado antes.
+function resolveDrawSource(target) {
+  if (target.kind === 'pending') {
+    const arr = target.previewId === 'preview-pre' ? pendingFilesPre : pendingFilesPost;
+    const entry = arr[target.index] || {};
+    return { baseSrc: entry.base || entry.dataUrl, shapes: entry.shapes || [] };
+  }
+  if (target.kind === 'existing') {
+    const arr = target.previewId === 'preview-pre' ? existingScreensPre : existingScreensPost;
+    const url = arr[target.index];
+    const trade = editingTradeId ? tradesCache.find(t => t.id === editingTradeId) : null;
+    const ann = trade && trade.annotations ? trade.annotations[url] : null;
+    return { baseSrc: (ann && ann.base) || url, shapes: (ann && ann.shapes) || [] };
+  }
+  // lightbox (operación ya guardada)
+  const trade = tradesCache.find(t => t.id === target.tradeId);
+  const ann = trade && trade.annotations ? trade.annotations[target.oldUrl] : null;
+  return { baseSrc: (ann && ann.base) || target.oldUrl, shapes: (ann && ann.shapes) || [] };
+}
+
+function openDrawEditor(target) {
   drawTarget = target;
-  drawShapes = [];
+  const { baseSrc, shapes } = resolveDrawSource(target);
+  drawTarget.baseSrc = baseSrc;
+  drawShapes = shapes ? JSON.parse(JSON.stringify(shapes)) : [];
   drawCurrent = null;
   drawCanvas = document.getElementById('draw-canvas');
   drawCtx = drawCanvas.getContext('2d');
@@ -738,7 +782,7 @@ function openDrawEditor(src, target) {
     document.getElementById('draw-modal').classList.add('open');
   };
   img.onerror = () => alert('No se pudo cargar la imagen para dibujar.');
-  img.src = src;
+  img.src = baseSrc;
 }
 
 function closeDrawEditor() {
@@ -802,12 +846,51 @@ function drawPointerPos(e) {
   };
 }
 
+function pointSegDist(px, py, x0, y0, x1, y1) {
+  const dx = x1 - x0, dy = y1 - y0;
+  if (dx === 0 && dy === 0) return Math.hypot(px - x0, py - y0);
+  let t = ((px - x0) * dx + (py - y0) * dy) / (dx * dx + dy * dy);
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(px - (x0 + t * dx), py - (y0 + t * dy));
+}
+
+function distanceToShape(s, p) {
+  if (s.tool === 'pen') {
+    if (s.points.length === 1) return Math.hypot(p.x - s.points[0].x, p.y - s.points[0].y);
+    let m = Infinity;
+    for (let i = 1; i < s.points.length; i++) {
+      m = Math.min(m, pointSegDist(p.x, p.y, s.points[i - 1].x, s.points[i - 1].y, s.points[i].x, s.points[i].y));
+    }
+    return m;
+  }
+  if (s.tool === 'line' || s.tool === 'arrow') return pointSegDist(p.x, p.y, s.x0, s.y0, s.x1, s.y1);
+  if (s.tool === 'rect') {
+    const a = Math.min(s.x0, s.x1), b = Math.max(s.x0, s.x1), c = Math.min(s.y0, s.y1), d = Math.max(s.y0, s.y1);
+    return Math.min(
+      pointSegDist(p.x, p.y, a, c, b, c),
+      pointSegDist(p.x, p.y, b, c, b, d),
+      pointSegDist(p.x, p.y, b, d, a, d),
+      pointSegDist(p.x, p.y, a, d, a, c),
+    );
+  }
+  return Infinity;
+}
+
+// Borra la forma superior cercana al punto (goma).
+function eraseAt(p) {
+  for (let i = drawShapes.length - 1; i >= 0; i--) {
+    const thr = 10 + (drawShapes[i].width || 2);
+    if (distanceToShape(drawShapes[i], p) <= thr) { drawShapes.splice(i, 1); redrawDraw(); return; }
+  }
+}
+
 function drawPointerDown(e) {
   if (!drawBaseImg) return;
   e.preventDefault();
   drawingNow = true;
   drawCanvas.setPointerCapture?.(e.pointerId);
   const p = drawPointerPos(e);
+  if (drawTool === 'eraser') { eraseAt(p); return; }
   if (drawTool === 'pen') {
     drawCurrent = { tool: 'pen', color: drawColor, width: drawWidth, points: [p] };
   } else {
@@ -816,8 +899,10 @@ function drawPointerDown(e) {
 }
 
 function drawPointerMove(e) {
-  if (!drawingNow || !drawCurrent) return;
+  if (!drawingNow) return;
   const p = drawPointerPos(e);
+  if (drawTool === 'eraser') { eraseAt(p); return; }
+  if (!drawCurrent) return;
   if (drawCurrent.tool === 'pen') drawCurrent.points.push(p);
   else { drawCurrent.x1 = p.x; drawCurrent.y1 = p.y; }
   redrawDraw();
@@ -839,6 +924,8 @@ async function applyDrawing() {
     alert('No se pudo exportar el dibujo (imagen protegida por CORS): ' + err.message);
     return;
   }
+  const shapes = JSON.parse(JSON.stringify(drawShapes));
+  const baseSrc = drawTarget.baseSrc;
 
   // Caso lightbox: captura de una operación ya guardada → re-subir y persistir.
   if (drawTarget.kind === 'lightbox') {
@@ -847,22 +934,24 @@ async function applyDrawing() {
     saveBtn.disabled = true;
     saveBtn.textContent = 'Guardando...';
     try {
-      const file = dataURLtoFile(dataUrl, 'anotada.jpg');
-      const newUrl = await uploadToCloudinary(file, currentUser.uid);
+      const newUrl = await uploadToCloudinary(dataURLtoFile(dataUrl, 'anotada.jpg'), currentUser.uid);
       const trade = tradesCache.find(t => t.id === drawTarget.tradeId);
       if (trade) {
-        const arrays = ['screenshotsPre', 'screenshotsPost'];
-        for (const key of arrays) {
+        ['screenshotsPre', 'screenshotsPost'].forEach(key => {
           const arr = trade[key] || [];
           const idx = arr.indexOf(drawTarget.oldUrl);
           if (idx >= 0) { arr[idx] = newUrl; trade[key] = arr; }
-        }
+        });
+        const ann = { ...(trade.annotations || {}) };
+        delete ann[drawTarget.oldUrl];
+        if (shapes.length) ann[newUrl] = { base: baseSrc, shapes };
+        trade.annotations = ann;
         await userTradesRef().doc(trade.id).update({
           screenshotsPre: trade.screenshotsPre || [],
           screenshotsPost: trade.screenshotsPost || [],
+          annotations: trade.annotations,
         });
       }
-      // Refresca el lightbox para mostrar la versión anotada.
       const li = lightboxImages.indexOf(drawTarget.oldUrl);
       if (li >= 0) lightboxImages[li] = newUrl;
       renderLightbox();
@@ -887,14 +976,21 @@ async function applyDrawing() {
     if (entry) {
       entry.dataUrl = dataUrl;
       entry.file = dataURLtoFile(dataUrl, (entry.file && entry.file.name) || 'anotada.jpg');
+      entry.base = baseSrc;   // conserva el original para futuras ediciones
+      entry.shapes = shapes;
     }
   } else {
-    // Imagen ya subida: la quitamos y añadimos la versión anotada como
-    // pendiente para que se re-suba al guardar la operación.
+    // Imagen ya subida: la quitamos y la versión anotada se añade como
+    // pendiente (con base + formas) para re-subirse al guardar la operación.
     existing.splice(drawTarget.index, 1);
-    pending.push({ file: dataURLtoFile(dataUrl, 'anotada.jpg'), dataUrl });
+    pending.push({ file: dataURLtoFile(dataUrl, 'anotada.jpg'), dataUrl, base: baseSrc, shapes });
   }
   renderUploadPreview(drawTarget.previewId, pending, existing);
+  // Si el visor a pantalla completa está abierto, refresca la imagen mostrada.
+  if (document.getElementById('lightbox').classList.contains('open')) {
+    lightboxImages[lightboxIndex] = dataUrl;
+    renderLightbox();
+  }
   closeDrawEditor();
 }
 
@@ -942,11 +1038,13 @@ async function applyDrawing() {
 let lightboxImages = [];
 let lightboxIndex = 0;
 let lightboxTrade = null;
+let lightboxEdit = null;   // { previewId, existingCount } cuando se abre desde el modal
 
-function openLightbox(srcOrImages, index = 0, trade = null) {
+function openLightbox(srcOrImages, index = 0, trade = null, editContext = null) {
   lightboxImages = Array.isArray(srcOrImages) ? srcOrImages.filter(Boolean) : [srcOrImages];
   lightboxIndex = Math.max(0, Math.min(index, lightboxImages.length - 1));
   lightboxTrade = trade;
+  lightboxEdit = editContext;
   renderLightbox();
   document.getElementById('lightbox').classList.add('open');
 }
@@ -962,9 +1060,10 @@ function renderLightbox() {
   document.getElementById('lightbox-next').style.display = showNav ? '' : 'none';
   document.getElementById('lightbox-info').innerHTML = lightboxTrade ? renderLightboxInfo(lightboxTrade) : '';
   document.getElementById('lightbox-info').style.display = lightboxTrade ? '' : 'none';
-  // Dibujar disponible cuando la captura pertenece a una operación guardada.
+  // Dibujar disponible para operaciones guardadas (revisión) y al editar/crear.
   const drawBtn = document.getElementById('lightbox-draw-btn');
-  if (drawBtn) drawBtn.style.display = (lightboxTrade && lightboxTrade.id && lightboxImages[lightboxIndex]) ? '' : 'none';
+  const canDraw = lightboxImages[lightboxIndex] && ((lightboxTrade && lightboxTrade.id) || lightboxEdit);
+  if (drawBtn) drawBtn.style.display = canDraw ? '' : 'none';
 }
 
 function renderLightboxInfo(t) {
@@ -1028,17 +1127,33 @@ document.getElementById('lightbox-close-btn').addEventListener('click', closeLig
 document.getElementById('lightbox-draw-btn').addEventListener('click', (e) => {
   e.stopPropagation();
   const url = lightboxImages[lightboxIndex];
-  if (!url || !lightboxTrade) return;
-  openDrawEditor(url, { kind: 'lightbox', tradeId: lightboxTrade.id, oldUrl: url });
+  if (!url) return;
+  if (lightboxEdit) {
+    // Abierto desde el modal de edición/creación: mapea al pendiente/existente.
+    const i = lightboxIndex;
+    const kind = i < lightboxEdit.existingCount ? 'existing' : 'pending';
+    const index = kind === 'existing' ? i : i - lightboxEdit.existingCount;
+    openDrawEditor({ kind, previewId: lightboxEdit.previewId, index });
+  } else if (lightboxTrade && lightboxTrade.id) {
+    openDrawEditor({ kind: 'lightbox', tradeId: lightboxTrade.id, oldUrl: url });
+  }
 });
 document.getElementById('lightbox-prev').addEventListener('click', (e) => { e.stopPropagation(); lightboxStep(-1); });
 document.getElementById('lightbox-next').addEventListener('click', (e) => { e.stopPropagation(); lightboxStep(1); });
 
 document.addEventListener('keydown', (e) => {
-  const lb = document.getElementById('lightbox');
-  if (!lb.classList.contains('open')) return;
-  if (e.key === 'Escape') closeLightbox();
-  else if (e.key === 'ArrowLeft') lightboxStep(-1);
+  const drawOpen = document.getElementById('draw-modal').classList.contains('open');
+  const lbOpen = document.getElementById('lightbox').classList.contains('open');
+  if (e.key === 'Escape') {
+    // Retrocede una capa cada vez: editor → visor → modal → operaciones.
+    if (drawOpen) { closeDrawEditor(); return; }
+    if (lbOpen) { closeLightbox(); return; }
+    if (modal.classList.contains('open')) { closeModal(); return; }
+    return;
+  }
+  // Las flechas navegan el visor solo si no está abierto el editor encima.
+  if (!lbOpen || drawOpen) return;
+  if (e.key === 'ArrowLeft') lightboxStep(-1);
   else if (e.key === 'ArrowRight') lightboxStep(1);
 });
 
@@ -1187,6 +1302,7 @@ form.addEventListener('submit', async (e) => {
       notes: document.getElementById('trade-notes-pre').value.trim(),
       screenshotsPre: [...existingScreensPre],
       screenshotsPost: [...existingScreensPost],
+      annotations: { ...((editingTradeId && tradesCache.find(t => t.id === editingTradeId)?.annotations) || {}) },
       ...readTradeEdgeFields(),
     };
 
@@ -1253,14 +1369,15 @@ form.addEventListener('submit', async (e) => {
     if (pendingFilesPre.length > 0 || pendingFilesPost.length > 0) {
       saveBtn.textContent = 'Subiendo imagenes...';
       try {
-        const [newPreUrls, newPostUrls] = await Promise.all([
-          uploadPendingFiles(pendingFilesPre, currentUser.uid),
-          uploadPendingFiles(pendingFilesPost, currentUser.uid),
+        const [preRes, postRes] = await Promise.all([
+          uploadPendingEntries(pendingFilesPre, currentUser.uid),
+          uploadPendingEntries(pendingFilesPost, currentUser.uid),
         ]);
-        console.log('[SAVE] Cloudinary URLs pre:', newPreUrls);
-        console.log('[SAVE] Cloudinary URLs post:', newPostUrls);
-        trade.screenshotsPre = [...existingScreensPre, ...newPreUrls];
-        trade.screenshotsPost = [...existingScreensPost, ...newPostUrls];
+        console.log('[SAVE] Cloudinary URLs pre:', preRes.urls);
+        console.log('[SAVE] Cloudinary URLs post:', postRes.urls);
+        trade.screenshotsPre = [...existingScreensPre, ...preRes.urls];
+        trade.screenshotsPost = [...existingScreensPost, ...postRes.urls];
+        trade.annotations = { ...trade.annotations, ...preRes.annotations, ...postRes.annotations };
       } catch (uploadErr) {
         console.error('[SAVE] Upload failed:', uploadErr);
         alert('Error subiendo imagenes: ' + uploadErr.message);
@@ -1272,6 +1389,12 @@ form.addEventListener('submit', async (e) => {
 
     console.log('[SAVE] Final screenshotsPre:', trade.screenshotsPre);
     console.log('[SAVE] Final screenshotsPost:', trade.screenshotsPost);
+
+    // Limpia anotaciones huérfanas (cuyas imágenes ya no están en la operación).
+    const keepUrls = new Set([...(trade.screenshotsPre || []), ...(trade.screenshotsPost || [])]);
+    trade.annotations = Object.fromEntries(
+      Object.entries(trade.annotations || {}).filter(([url]) => keepUrls.has(url))
+    );
 
     // Save to Firestore
     saveBtn.textContent = 'Guardando...';
