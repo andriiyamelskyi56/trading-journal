@@ -673,6 +673,40 @@
     </div>
   </div>
 
+  <!-- MODAL: EDITOR DE DIBUJO -->
+  <div class="modal-overlay" id="draw-modal">
+    <div class="modal draw-modal">
+      <div class="modal-header">
+        <h3>Dibujar sobre la captura</h3>
+        <button class="modal-close" id="draw-close">&times;</button>
+      </div>
+      <div class="draw-toolbar">
+        <div class="draw-tools" id="draw-tools">
+          <button type="button" class="draw-tool active" data-tool="pen" title="Lápiz">✏️</button>
+          <button type="button" class="draw-tool" data-tool="line" title="Línea">╱</button>
+          <button type="button" class="draw-tool" data-tool="arrow" title="Flecha">↗</button>
+          <button type="button" class="draw-tool" data-tool="rect" title="Rectángulo">▭</button>
+        </div>
+        <div class="draw-colors" id="draw-colors"></div>
+        <label class="draw-field" title="Color personalizado">
+          <input type="color" id="draw-color" value="#ef4444">
+        </label>
+        <label class="draw-field draw-width">Grosor
+          <input type="range" id="draw-width" min="1" max="24" value="4">
+        </label>
+        <button type="button" class="btn btn-sm" id="draw-undo">Deshacer</button>
+        <button type="button" class="btn btn-sm" id="draw-clear">Limpiar</button>
+      </div>
+      <div class="draw-canvas-wrap">
+        <canvas id="draw-canvas"></canvas>
+      </div>
+      <div class="form-actions">
+        <button type="button" class="btn" id="draw-cancel">Cancelar</button>
+        <button type="button" class="btn btn-primary" id="draw-save">Guardar dibujo</button>
+      </div>
+    </div>
+  </div>
+
   <!-- LIGHTBOX -->
   <div class="lightbox" id="lightbox">
     <button class="lightbox-close" id="lightbox-close-btn">&times;</button>

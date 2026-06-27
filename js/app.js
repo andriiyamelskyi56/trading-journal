@@ -587,12 +587,19 @@ function renderUploadPreview(previewId, pendingArray, existingUrls = []) {
     const img = document.createElement('img');
     img.src = url;
     img.addEventListener('click', (e) => { e.stopPropagation(); openLightbox(galleryUrls, i); });
+    const drawBtn = document.createElement('button');
+    drawBtn.type = 'button';
+    drawBtn.className = 'upload-thumb-draw';
+    drawBtn.title = 'Dibujar';
+    drawBtn.textContent = '\u270f\ufe0f';
+    drawBtn.addEventListener('click', (e) => { e.stopPropagation(); openDrawEditor(url, { kind: 'existing', previewId, index: i }); });
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'upload-thumb-remove';
     btn.dataset.existing = i;
     btn.textContent = '\u00d7';
     thumb.appendChild(img);
+    thumb.appendChild(drawBtn);
     thumb.appendChild(btn);
     preview.appendChild(thumb);
   });
@@ -603,12 +610,19 @@ function renderUploadPreview(previewId, pendingArray, existingUrls = []) {
     const img = document.createElement('img');
     img.src = entry.dataUrl;
     img.addEventListener('click', (e) => { e.stopPropagation(); openLightbox(galleryUrls, existingUrls.length + i); });
+    const drawBtn = document.createElement('button');
+    drawBtn.type = 'button';
+    drawBtn.className = 'upload-thumb-draw';
+    drawBtn.title = 'Dibujar';
+    drawBtn.textContent = '\u270f\ufe0f';
+    drawBtn.addEventListener('click', (e) => { e.stopPropagation(); openDrawEditor(entry.dataUrl, { kind: 'pending', previewId, index: i }); });
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'upload-thumb-remove';
     btn.dataset.pending = i;
     btn.textContent = '\u00d7';
     thumb.appendChild(img);
+    thumb.appendChild(drawBtn);
     thumb.appendChild(btn);
     preview.appendChild(thumb);
   });
@@ -684,6 +698,206 @@ async function uploadPendingFiles(files, userId) {
   }
   return urls;
 }
+
+// ==================== EDITOR DE DIBUJO (tipo Paint) ====================
+const DRAW_PALETTE = ['#ef4444', '#22c55e', '#3b82f6', '#eab308', '#a855f7', '#ffffff', '#000000'];
+const DRAW_MAX_W = 1600;
+let drawCanvas, drawCtx, drawBaseImg;
+let drawShapes = [];        // formas confirmadas (para deshacer / redibujar)
+let drawCurrent = null;     // forma en curso
+let drawTool = 'pen';
+let drawColor = '#ef4444';
+let drawWidth = 4;
+let drawingNow = false;
+let drawTarget = null;      // { kind: 'pending'|'existing', previewId, index }
+
+function dataURLtoFile(dataUrl, name) {
+  const [head, body] = dataUrl.split(',');
+  const mime = (head.match(/:(.*?);/) || [, 'image/jpeg'])[1];
+  const bin = atob(body);
+  const arr = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+  return new File([arr], name, { type: mime });
+}
+
+function openDrawEditor(src, target) {
+  drawTarget = target;
+  drawShapes = [];
+  drawCurrent = null;
+  drawCanvas = document.getElementById('draw-canvas');
+  drawCtx = drawCanvas.getContext('2d');
+
+  const img = new Image();
+  img.crossOrigin = 'anonymous';
+  img.onload = () => {
+    drawBaseImg = img;
+    const scale = Math.min(1, DRAW_MAX_W / img.naturalWidth);
+    drawCanvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
+    drawCanvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
+    redrawDraw();
+    document.getElementById('draw-modal').classList.add('open');
+  };
+  img.onerror = () => alert('No se pudo cargar la imagen para dibujar.');
+  img.src = src;
+}
+
+function closeDrawEditor() {
+  document.getElementById('draw-modal').classList.remove('open');
+  drawBaseImg = null;
+  drawShapes = [];
+  drawCurrent = null;
+  drawTarget = null;
+}
+
+function redrawDraw() {
+  if (!drawCtx || !drawBaseImg) return;
+  drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+  drawCtx.drawImage(drawBaseImg, 0, 0, drawCanvas.width, drawCanvas.height);
+  drawShapes.forEach(s => paintShape(s));
+  if (drawCurrent) paintShape(drawCurrent);
+}
+
+function paintShape(s) {
+  const ctx = drawCtx;
+  ctx.strokeStyle = s.color;
+  ctx.fillStyle = s.color;
+  ctx.lineWidth = s.width;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  if (s.tool === 'pen') {
+    if (s.points.length < 2) {
+      const p = s.points[0];
+      ctx.beginPath(); ctx.arc(p.x, p.y, s.width / 2, 0, Math.PI * 2); ctx.fill();
+      return;
+    }
+    ctx.beginPath();
+    ctx.moveTo(s.points[0].x, s.points[0].y);
+    for (let i = 1; i < s.points.length; i++) ctx.lineTo(s.points[i].x, s.points[i].y);
+    ctx.stroke();
+  } else if (s.tool === 'line' || s.tool === 'arrow') {
+    ctx.beginPath();
+    ctx.moveTo(s.x0, s.y0);
+    ctx.lineTo(s.x1, s.y1);
+    ctx.stroke();
+    if (s.tool === 'arrow') {
+      const ang = Math.atan2(s.y1 - s.y0, s.x1 - s.x0);
+      const len = Math.max(10, s.width * 4);
+      ctx.beginPath();
+      ctx.moveTo(s.x1, s.y1);
+      ctx.lineTo(s.x1 - len * Math.cos(ang - Math.PI / 6), s.y1 - len * Math.sin(ang - Math.PI / 6));
+      ctx.moveTo(s.x1, s.y1);
+      ctx.lineTo(s.x1 - len * Math.cos(ang + Math.PI / 6), s.y1 - len * Math.sin(ang + Math.PI / 6));
+      ctx.stroke();
+    }
+  } else if (s.tool === 'rect') {
+    ctx.strokeRect(s.x0, s.y0, s.x1 - s.x0, s.y1 - s.y0);
+  }
+}
+
+function drawPointerPos(e) {
+  const rect = drawCanvas.getBoundingClientRect();
+  return {
+    x: (e.clientX - rect.left) * (drawCanvas.width / rect.width),
+    y: (e.clientY - rect.top) * (drawCanvas.height / rect.height),
+  };
+}
+
+function drawPointerDown(e) {
+  if (!drawBaseImg) return;
+  e.preventDefault();
+  drawingNow = true;
+  drawCanvas.setPointerCapture?.(e.pointerId);
+  const p = drawPointerPos(e);
+  if (drawTool === 'pen') {
+    drawCurrent = { tool: 'pen', color: drawColor, width: drawWidth, points: [p] };
+  } else {
+    drawCurrent = { tool: drawTool, color: drawColor, width: drawWidth, x0: p.x, y0: p.y, x1: p.x, y1: p.y };
+  }
+}
+
+function drawPointerMove(e) {
+  if (!drawingNow || !drawCurrent) return;
+  const p = drawPointerPos(e);
+  if (drawCurrent.tool === 'pen') drawCurrent.points.push(p);
+  else { drawCurrent.x1 = p.x; drawCurrent.y1 = p.y; }
+  redrawDraw();
+}
+
+function drawPointerUp() {
+  if (!drawingNow) return;
+  drawingNow = false;
+  if (drawCurrent) { drawShapes.push(drawCurrent); drawCurrent = null; }
+  redrawDraw();
+}
+
+function applyDrawing() {
+  if (!drawCanvas || !drawTarget) return;
+  let dataUrl;
+  try {
+    dataUrl = drawCanvas.toDataURL('image/jpeg', 0.92);
+  } catch (err) {
+    alert('No se pudo exportar el dibujo (imagen protegida por CORS): ' + err.message);
+    return;
+  }
+  const isPre = drawTarget.previewId === 'preview-pre';
+  const pending = isPre ? pendingFilesPre : pendingFilesPost;
+  const existing = isPre ? existingScreensPre : existingScreensPost;
+
+  if (drawTarget.kind === 'pending') {
+    const entry = pending[drawTarget.index];
+    if (entry) {
+      entry.dataUrl = dataUrl;
+      entry.file = dataURLtoFile(dataUrl, (entry.file && entry.file.name) || 'anotada.jpg');
+    }
+  } else {
+    // Imagen ya subida: la quitamos y añadimos la versión anotada como
+    // pendiente para que se re-suba al guardar la operación.
+    existing.splice(drawTarget.index, 1);
+    pending.push({ file: dataURLtoFile(dataUrl, 'anotada.jpg'), dataUrl });
+  }
+  renderUploadPreview(drawTarget.previewId, pending, existing);
+  closeDrawEditor();
+}
+
+// Toolbar wiring
+(function setupDrawToolbar() {
+  const colorsBox = document.getElementById('draw-colors');
+  if (colorsBox) {
+    colorsBox.innerHTML = DRAW_PALETTE.map((c, i) =>
+      `<button type="button" class="draw-swatch${i === 0 ? ' active' : ''}" data-color="${c}" style="background:${c}"></button>`).join('');
+    colorsBox.querySelectorAll('.draw-swatch').forEach(sw => {
+      sw.addEventListener('click', () => {
+        drawColor = sw.dataset.color;
+        document.getElementById('draw-color').value = drawColor;
+        colorsBox.querySelectorAll('.draw-swatch').forEach(s => s.classList.toggle('active', s === sw));
+      });
+    });
+  }
+  document.getElementById('draw-color')?.addEventListener('input', (e) => {
+    drawColor = e.target.value;
+    document.querySelectorAll('#draw-colors .draw-swatch').forEach(s => s.classList.remove('active'));
+  });
+  document.getElementById('draw-width')?.addEventListener('input', (e) => { drawWidth = parseInt(e.target.value); });
+  document.getElementById('draw-tools')?.addEventListener('click', (e) => {
+    const btn = e.target.closest('.draw-tool');
+    if (!btn) return;
+    drawTool = btn.dataset.tool;
+    document.querySelectorAll('#draw-tools .draw-tool').forEach(b => b.classList.toggle('active', b === btn));
+  });
+  document.getElementById('draw-undo')?.addEventListener('click', () => { drawShapes.pop(); redrawDraw(); });
+  document.getElementById('draw-clear')?.addEventListener('click', () => { drawShapes = []; redrawDraw(); });
+  document.getElementById('draw-save')?.addEventListener('click', applyDrawing);
+  document.getElementById('draw-cancel')?.addEventListener('click', closeDrawEditor);
+  document.getElementById('draw-close')?.addEventListener('click', closeDrawEditor);
+
+  const canvas = document.getElementById('draw-canvas');
+  if (canvas) {
+    canvas.addEventListener('pointerdown', drawPointerDown);
+    canvas.addEventListener('pointermove', drawPointerMove);
+    canvas.addEventListener('pointerup', drawPointerUp);
+    canvas.addEventListener('pointercancel', drawPointerUp);
+  }
+})();
 
 // ==================== LIGHTBOX ====================
 let lightboxImages = [];
