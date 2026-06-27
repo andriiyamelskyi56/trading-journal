@@ -1189,16 +1189,28 @@ a { color: var(--accent); text-decoration: none; }
   display: flex;
   flex-direction: column;
 }
-.draw-modal .modal-header { margin-bottom: 6px; }
-.draw-modal .form-actions { margin-top: 8px; }
+.draw-topbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  padding-bottom: 6px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+.draw-title { margin: 0; font-size: 15px; white-space: nowrap; }
+.draw-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.draw-actions .modal-close { font-size: 26px; line-height: 1; }
 .draw-toolbar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  padding: 6px 0;
-  border-bottom: 1px solid var(--border);
-  margin-bottom: 8px;
 }
 .draw-tools { display: flex; gap: 4px; }
 .draw-tool {
@@ -1242,7 +1254,7 @@ a { color: var(--accent); text-decoration: none; }
 }
 #draw-canvas {
   max-width: 100%;
-  max-height: calc(100vh - 116px);
+  max-height: calc(100vh - 72px);
   touch-action: none;
   cursor: crosshair;
   background: #000;
