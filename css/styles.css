@@ -2615,3 +2615,6 @@ body.chart-fullscreen-active { overflow: hidden; }
 }
 .tag-list li:last-child { border-bottom: none; }
 .tag-empty { color: var(--text-muted); font-size: 12px; padding: 12px; }
+.tag-name { display: flex; flex-direction: column; gap: 2px; }
+.tag-meta { color: var(--text-muted); font-size: 11px; }
+.tag-actions { display: flex; gap: 8px; flex-shrink: 0; }

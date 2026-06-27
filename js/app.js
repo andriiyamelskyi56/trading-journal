@@ -2001,6 +2001,7 @@ document.getElementById('trade-mistake-add')?.addEventListener('click', () => {
 
 // ---- Tag manager modal (used by Edge section buttons) ----
 let tagManagerKind = 'setups';
+let tagManagerSetups = [];
 function openTagManager(kind) {
   tagManagerKind = kind;
   document.getElementById('tag-manager-title').textContent =
@@ -2010,18 +2011,103 @@ function openTagManager(kind) {
 }
 function renderTagManagerList() {
   const ul = document.getElementById('tag-manager-list');
-  const list = tagManagerKind === 'setups' ? getSetups() : getMistakes();
+
+  if (tagManagerKind === 'setups') {
+    // Unión de la lista guardada + setups escritos en operaciones, con su uso.
+    const saved = getSetups();
+    const counts = {};
+    tradesCache.forEach(t => { if (t.setup) counts[t.setup] = (counts[t.setup] || 0) + 1; });
+    tagManagerSetups = [...new Set([...saved, ...Object.keys(counts)])]
+      .sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }));
+    ul.innerHTML = tagManagerSetups.length
+      ? tagManagerSetups.map((name, i) => {
+          const n = counts[name] || 0;
+          const meta = [];
+          if (n > 0) meta.push(`${n} ${n === 1 ? 'operación' : 'operaciones'}`);
+          if (!saved.includes(name)) meta.push('sin guardar');
+          const metaHtml = meta.length ? `<small class="tag-meta">${meta.join(' · ')}</small>` : '';
+          return `<li>
+            <span class="tag-name">${escapeHtml(name)}${metaHtml}</span>
+            <span class="tag-actions">
+              <button type="button" class="btn btn-sm btn-edit" data-setup-rename="${i}">Renombrar</button>
+              <button type="button" class="btn btn-sm btn-delete" data-setup-del="${i}">Eliminar</button>
+            </span>
+          </li>`;
+        }).join('')
+      : '<li class="tag-empty">Lista vacía.</li>';
+    ul.querySelectorAll('[data-setup-rename]').forEach(btn => {
+      btn.addEventListener('click', () => renameSetup(tagManagerSetups[parseInt(btn.dataset.setupRename)]));
+    });
+    ul.querySelectorAll('[data-setup-del]').forEach(btn => {
+      btn.addEventListener('click', () => deleteSetup(tagManagerSetups[parseInt(btn.dataset.setupDel)]));
+    });
+    return;
+  }
+
+  const list = getMistakes();
   ul.innerHTML = list.length
     ? list.map((t, i) => `<li><span>${escapeHtml(t)}</span><button type="button" class="btn btn-sm btn-delete" data-tag-del="${i}">Eliminar</button></li>`).join('')
     : '<li class="tag-empty">Lista vacía.</li>';
   ul.querySelectorAll('[data-tag-del]').forEach(btn => {
     btn.addEventListener('click', () => {
-      const list2 = tagManagerKind === 'setups' ? getSetups() : getMistakes();
+      const list2 = getMistakes();
       list2.splice(parseInt(btn.dataset.tagDel), 1);
-      tagManagerKind === 'setups' ? saveSetups(list2) : saveMistakes(list2);
+      saveMistakes(list2);
       renderTagManagerList();
     });
   });
+}
+
+// Renombra un setup en la lista guardada y en todas las operaciones que lo
+// usan. Sirve para fusionar duplicados/typos (p. ej. "Conytra Tend" → "CONTRA TREND").
+async function renameSetup(oldName) {
+  if (!oldName) return;
+  const input = prompt(`Renombrar setup "${oldName}" a:`, oldName);
+  if (input === null) return;
+  const name = input.trim();
+  if (!name || name === oldName) return;
+
+  const saved = getSetups();
+  const idx = saved.indexOf(oldName);
+  if (idx >= 0) saved.splice(idx, 1);
+  if (!saved.includes(name)) saved.push(name);
+  saveSetups(saved);
+
+  const affected = tradesCache.filter(t => t.setup === oldName);
+  affected.forEach(t => { t.setup = name; }); // optimista, refleja el conteo al instante
+  renderTagManagerList();
+  if (affected.length) {
+    try {
+      await Promise.all(affected.map(t => userTradesRef().doc(t.id).update({ setup: name })));
+    } catch (e) {
+      alert('Error al actualizar operaciones: ' + e.message);
+    }
+  }
+}
+
+// Elimina un setup de la lista guardada y quita su etiqueta de las
+// operaciones que lo usan (no borra las operaciones).
+async function deleteSetup(name) {
+  if (!name) return;
+  const affected = tradesCache.filter(t => t.setup === name);
+  const msg = affected.length
+    ? `El setup "${name}" se usa en ${affected.length} ${affected.length === 1 ? 'operación' : 'operaciones'}. Al eliminarlo se quitará la etiqueta de esas operaciones (no se borran). ¿Continuar?`
+    : `¿Eliminar el setup "${name}"?`;
+  if (!confirm(msg)) return;
+
+  const saved = getSetups();
+  const idx = saved.indexOf(name);
+  if (idx >= 0) { saved.splice(idx, 1); saveSetups(saved); }
+
+  affected.forEach(t => { t.setup = null; }); // optimista
+  renderTagManagerList();
+  if (affected.length) {
+    try {
+      await Promise.all(affected.map(t => userTradesRef().doc(t.id).update({ setup: null })));
+    } catch (e) {
+      alert('Error al actualizar operaciones: ' + e.message);
+    }
+  }
 }
 document.getElementById('tag-manager-close')?.addEventListener('click', () => {
   document.getElementById('tag-manager-modal').classList.remove('open');
