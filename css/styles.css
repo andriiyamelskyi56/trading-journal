@@ -1158,6 +1158,91 @@ a { color: var(--accent); text-decoration: none; }
   justify-content: center;
 }
 
+.upload-thumb-draw {
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.6);
+  border: none;
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+.upload-thumb-draw:hover { background: var(--accent); }
+
+/* ==================== EDITOR DE DIBUJO ==================== */
+#draw-modal { z-index: 1600; }
+.draw-modal {
+  max-width: 1100px;
+  width: 96%;
+  display: flex;
+  flex-direction: column;
+  max-height: 94vh;
+}
+.draw-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 12px;
+}
+.draw-tools { display: flex; gap: 4px; }
+.draw-tool {
+  width: 34px;
+  height: 32px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 15px;
+}
+.draw-tool.active { border-color: var(--accent); background: var(--accent); color: #fff; }
+.draw-colors { display: flex; gap: 6px; }
+.draw-swatch {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  padding: 0;
+}
+.draw-swatch.active { border-color: var(--text); box-shadow: 0 0 0 2px var(--accent); }
+.draw-field { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-muted); }
+.draw-field input[type="color"] {
+  width: 30px; height: 28px; padding: 0; border: 1px solid var(--border);
+  border-radius: 6px; background: none; cursor: pointer;
+}
+.draw-width input[type="range"] { width: 90px; }
+.draw-canvas-wrap {
+  flex: 1;
+  overflow: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    linear-gradient(45deg, #1a1a1a 25%, transparent 25%) 0 0/20px 20px,
+    linear-gradient(-45deg, #1a1a1a 25%, transparent 25%) 0 0/20px 20px;
+  border-radius: 8px;
+  min-height: 200px;
+}
+#draw-canvas {
+  max-width: 100%;
+  max-height: 72vh;
+  touch-action: none;
+  cursor: crosshair;
+  background: #000;
+}
+
 /* ==================== LIGHTBOX ==================== */
 .lightbox {
   display: none;
