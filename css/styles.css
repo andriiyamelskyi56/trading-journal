@@ -294,13 +294,12 @@ a { color: var(--accent); text-decoration: none; }
   font-size: 13px;
 }
 
-/* Icono del calendario visible sobre fondo oscuro (Chromium/Brave). */
-input[type="date"]::-webkit-calendar-picker-indicator {
-  filter: invert(1) brightness(1.6);
-  opacity: 0.85;
-  cursor: pointer;
+/* El calendario nativo (icono + desplegable) se pinta en oscuro y encaja
+   con el tema de la app. */
+input[type="date"], input[type="datetime-local"], input[type="month"] {
+  color-scheme: dark;
 }
-input[type="date"]::-webkit-calendar-picker-indicator:hover { opacity: 1; }
+input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; }
 
 /* ==================== DASHBOARD CHARTS ==================== */
 .summary-cards-secondary .card {
