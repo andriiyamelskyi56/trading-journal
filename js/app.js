@@ -728,6 +728,8 @@ let drawTool = 'pen';
 let drawColor = '#ef4444';
 let drawWidth = 4;
 let drawingNow = false;
+let draggingText = null;       // forma de texto que se está moviendo
+let dragOffset = { x: 0, y: 0 };
 let drawTarget = null;      // { kind: 'pending'|'existing', previewId, index }
 
 function dataURLtoFile(dataUrl, name) {
@@ -900,11 +902,30 @@ function eraseAt(p) {
   }
 }
 
+// Devuelve la forma de texto superior bajo el punto (para moverla/editarla).
+function findTextAt(p) {
+  for (let i = drawShapes.length - 1; i >= 0; i--) {
+    const s = drawShapes[i];
+    if (s.tool === 'text' && distanceToShape(s, p) <= 8) return s;
+  }
+  return null;
+}
+
 function drawPointerDown(e) {
   if (!drawBaseImg) return;
   e.preventDefault();
   const p = drawPointerPos(e);
   if (drawTool === 'text') {
+    // Clic sobre un texto existente → arrastrarlo para reposicionarlo.
+    const hit = findTextAt(p);
+    if (hit) {
+      draggingText = hit;
+      dragOffset = { x: p.x - hit.x, y: p.y - hit.y };
+      drawingNow = true;
+      drawCanvas.setPointerCapture?.(e.pointerId);
+      return;
+    }
+    // Clic en zona vacía → añadir un texto nuevo.
     const txt = prompt('Texto a añadir:');
     if (txt && txt.trim()) {
       drawShapes.push({ tool: 'text', color: drawColor, size: Math.max(14, drawWidth * 5), x: p.x, y: p.y, text: txt.trim() });
@@ -925,6 +946,12 @@ function drawPointerDown(e) {
 function drawPointerMove(e) {
   if (!drawingNow) return;
   const p = drawPointerPos(e);
+  if (draggingText) {
+    draggingText.x = p.x - dragOffset.x;
+    draggingText.y = p.y - dragOffset.y;
+    redrawDraw();
+    return;
+  }
   if (drawTool === 'eraser') { eraseAt(p); return; }
   if (!drawCurrent) return;
   if (drawCurrent.tool === 'pen') drawCurrent.points.push(p);
@@ -935,6 +962,7 @@ function drawPointerMove(e) {
 function drawPointerUp() {
   if (!drawingNow) return;
   drawingNow = false;
+  draggingText = null;
   if (drawCurrent) { drawShapes.push(drawCurrent); drawCurrent = null; }
   redrawDraw();
 }
