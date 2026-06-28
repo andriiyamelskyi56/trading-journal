@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="color-scheme" content="dark">
   <title>Trading Journal</title>
-  <link rel="stylesheet" href="css/styles.css?v=61">
+  <link rel="stylesheet" href="css/styles.css?v=62">
 </head>
 <body>
   <!-- PANTALLA DE AUTH -->
@@ -686,6 +686,23 @@
     </div>
   </div>
 
+  <!-- MODAL: CAMBIOS SIN GUARDAR -->
+  <div class="modal-overlay" id="unsaved-modal">
+    <div class="modal" style="width:440px;">
+      <div class="modal-header">
+        <h3>Operación sin guardar</h3>
+      </div>
+      <p style="color:var(--text-muted);margin-bottom:20px;line-height:1.5;">
+        Tienes cambios sin guardar en esta operación. ¿Qué quieres hacer?
+      </p>
+      <div class="form-actions">
+        <button type="button" class="btn" id="unsaved-keep">Seguir editando</button>
+        <button type="button" class="btn btn-delete" id="unsaved-discard">Descartar</button>
+        <button type="button" class="btn btn-primary" id="unsaved-save">Guardar</button>
+      </div>
+    </div>
+  </div>
+
   <!-- MODAL: EDITOR DE DIBUJO -->
   <div class="modal-overlay" id="draw-modal">
     <div class="modal draw-modal">
@@ -744,6 +761,6 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
   <script src="js/firebase-config.js?v=30"></script>
-  <script src="js/app.js?v=61"></script>
+  <script src="js/app.js?v=62"></script>
 </body>
 </html>

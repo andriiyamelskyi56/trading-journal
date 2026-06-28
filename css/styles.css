@@ -1196,6 +1196,8 @@ input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; }
 }
 .upload-thumb-draw:hover { background: var(--accent); }
 
+#unsaved-modal { z-index: 1700; }
+
 /* ==================== EDITOR DE DIBUJO ==================== */
 #draw-modal { z-index: 2100; }
 .draw-modal {
