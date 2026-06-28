@@ -6,6 +6,7 @@ let openHistoricalCache = {}; // { tradeId: [{date:'YYYY-MM-DD', close}] }
 let currentMonth = new Date().getMonth();
 let currentYear = new Date().getFullYear();
 let editingTradeId = null;
+let modalDirty = false;   // hay cambios sin guardar en el modal de operación
 let unsubscribeTrades = null;
 let calendarView = 'month';
 let currentWeekStart = (() => { const d = new Date(); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); d.setHours(0,0,0,0); return d; })();
@@ -570,6 +571,7 @@ function handleFiles(files, previewId, pendingArray) {
       const entry = { file, dataUrl: e.target.result, base: e.target.result, shapes: [] };
       pendingArray.push(entry);
       renderUploadPreview(previewId, pendingArray);
+      markModalDirty();
     };
     reader.readAsDataURL(file);
   });
@@ -651,6 +653,7 @@ document.addEventListener('click', (e) => {
     existing.splice(parseInt(btn.dataset.existing), 1);
   }
   renderUploadPreview(previewId, pending, existing);
+  markModalDirty();
 });
 
 setupUploadZone('upload-pre', 'file-pre', 'preview-pre', pendingFilesPre);
@@ -683,6 +686,7 @@ document.addEventListener('paste', (e) => {
     reader.onload = (ev) => {
       pending.push({ file, dataUrl: ev.target.result, base: ev.target.result, shapes: [] });
       renderUploadPreview(previewId, pending, existing);
+      markModalDirty();
     };
     reader.readAsDataURL(file);
   });
@@ -1038,6 +1042,7 @@ async function applyDrawing() {
     pending.push({ file: dataURLtoFile(dataUrl, 'anotada.jpg'), dataUrl, base: baseSrc, shapes });
   }
   renderUploadPreview(drawTarget.previewId, pending, existing);
+  markModalDirty();
   // Si el visor a pantalla completa está abierto, refresca la imagen mostrada.
   if (document.getElementById('lightbox').classList.contains('open')) {
     lightboxImages[lightboxIndex] = dataUrl;
@@ -1219,11 +1224,13 @@ document.getElementById('lightbox-next').addEventListener('click', (e) => { e.st
 document.addEventListener('keydown', (e) => {
   const drawOpen = document.getElementById('draw-modal').classList.contains('open');
   const lbOpen = document.getElementById('lightbox').classList.contains('open');
+  const unsavedOpen = document.getElementById('unsaved-modal').classList.contains('open');
   if (e.key === 'Escape') {
-    // Retrocede una capa cada vez: editor → visor → modal → operaciones.
+    // Retrocede una capa cada vez: diálogo → editor → visor → modal → operaciones.
+    if (unsavedOpen) { document.getElementById('unsaved-modal').classList.remove('open'); return; }
     if (drawOpen) { closeDrawEditor(); return; }
     if (lbOpen) { closeLightbox(); return; }
-    if (modal.classList.contains('open')) { closeModal(); return; }
+    if (modal.classList.contains('open')) { requestCloseModal(); return; }
     return;
   }
   // Las flechas navegan el visor solo si no está abierto el editor encima.
@@ -1327,18 +1334,51 @@ function openModal(trade = null) {
   renderUploadPreview('preview-post', pendingFilesPost, existingScreensPost);
   populateTradeEdgeFields(trade);
   modal.classList.add('open');
+  modalDirty = false;   // recién abierto: sin cambios
+}
+
+// Marca el modal como modificado (hay datos que se perderían al cerrar).
+function markModalDirty() {
+  if (modal.classList.contains('open')) modalDirty = true;
 }
 
 function closeModal() {
   modal.classList.remove('open');
   editingTradeId = null;
+  modalDirty = false;
+}
+
+// Cierre "seguro": si hay cambios sin guardar, pregunta antes de salir.
+function requestCloseModal() {
+  if (modalDirty) {
+    document.getElementById('unsaved-modal').classList.add('open');
+    return;
+  }
+  closeModal();
 }
 
 addBtn.addEventListener('click', () => openModal());
-closeBtn.addEventListener('click', closeModal);
-cancelBtn.addEventListener('click', closeModal);
+closeBtn.addEventListener('click', requestCloseModal);
+cancelBtn.addEventListener('click', requestCloseModal);
 modal.addEventListener('click', (e) => {
-  if (e.target === modal) closeModal();
+  if (e.target === modal) requestCloseModal();
+});
+
+// Marca cambios ante cualquier edición del formulario.
+form.addEventListener('input', markModalDirty);
+form.addEventListener('change', markModalDirty);
+
+// Diálogo de cambios sin guardar.
+document.getElementById('unsaved-keep').addEventListener('click', () => {
+  document.getElementById('unsaved-modal').classList.remove('open');
+});
+document.getElementById('unsaved-discard').addEventListener('click', () => {
+  document.getElementById('unsaved-modal').classList.remove('open');
+  closeModal();
+});
+document.getElementById('unsaved-save').addEventListener('click', () => {
+  document.getElementById('unsaved-modal').classList.remove('open');
+  form.requestSubmit();   // valida y guarda; cierra el modal si todo va bien
 });
 
 // ==================== FORM SUBMIT ====================
