@@ -563,17 +563,44 @@ function setupUploadZone(zoneId, fileInputId, previewId, pendingArray) {
   });
 }
 
-function handleFiles(files, previewId, pendingArray) {
-  Array.from(files).forEach(file => {
-    if (!file.type.startsWith('image/')) return;
+// Redimensiona y comprime una imagen a JPEG para que las subidas sean
+// ligeras y fiables (las capturas originales pueden pesar varios MB).
+function compressImageFile(file, maxW = 1920, quality = 0.85) {
+  return new Promise((resolve) => {
     const reader = new FileReader();
     reader.onload = (e) => {
-      const entry = { file, dataUrl: e.target.result, base: e.target.result, shapes: [] };
-      pendingArray.push(entry);
-      renderUploadPreview(previewId, pendingArray);
-      markModalDirty();
+      const img = new Image();
+      img.onload = () => {
+        const scale = Math.min(1, maxW / img.naturalWidth);
+        const w = Math.max(1, Math.round(img.naturalWidth * scale));
+        const h = Math.max(1, Math.round(img.naturalHeight * scale));
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        let dataUrl;
+        try { dataUrl = canvas.toDataURL('image/jpeg', quality); }
+        catch { resolve({ file, dataUrl: e.target.result }); return; }
+        canvas.toBlob((blob) => {
+          const out = blob ? new File([blob], ((file.name || 'captura').replace(/\.\w+$/, '')) + '.jpg', { type: 'image/jpeg' }) : file;
+          resolve({ file: out, dataUrl });
+        }, 'image/jpeg', quality);
+      };
+      img.onerror = () => resolve({ file, dataUrl: e.target.result });
+      img.src = e.target.result;
     };
+    reader.onerror = () => resolve({ file, dataUrl: '' });
     reader.readAsDataURL(file);
+  });
+}
+
+function handleFiles(files, previewId, pendingArray) {
+  Array.from(files).forEach(async (file) => {
+    if (!file.type.startsWith('image/')) return;
+    const { file: cfile, dataUrl } = await compressImageFile(file);
+    if (!dataUrl) return;
+    pendingArray.push({ file: cfile, dataUrl, base: dataUrl, shapes: [] });
+    renderUploadPreview(previewId, pendingArray);
+    markModalDirty();
   });
 }
 
@@ -681,14 +708,12 @@ document.addEventListener('paste', (e) => {
   const previewId = isResultTab ? 'preview-post' : 'preview-pre';
   const existing = isResultTab ? existingScreensPost : existingScreensPre;
 
-  imageFiles.forEach(file => {
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      pending.push({ file, dataUrl: ev.target.result, base: ev.target.result, shapes: [] });
-      renderUploadPreview(previewId, pending, existing);
-      markModalDirty();
-    };
-    reader.readAsDataURL(file);
+  imageFiles.forEach(async (file) => {
+    const { file: cfile, dataUrl } = await compressImageFile(file);
+    if (!dataUrl) return;
+    pending.push({ file: cfile, dataUrl, base: dataUrl, shapes: [] });
+    renderUploadPreview(previewId, pending, existing);
+    markModalDirty();
   });
 });
 setupUploadZone('upload-post', 'file-post', 'preview-post', pendingFilesPost);
@@ -708,18 +733,24 @@ async function uploadPendingFiles(files, userId) {
 async function uploadPendingEntries(entries, userId) {
   const urls = [];
   const annotations = {};
+  let failed = 0;
   for (const entry of entries) {
-    const url = await uploadToCloudinary(entry.file, userId);
-    urls.push(url);
-    if (entry.shapes && entry.shapes.length) {
-      let baseUrl = entry.base;
-      if (!/^https?:/i.test(baseUrl || '')) {
-        baseUrl = await uploadToCloudinary(dataURLtoFile(entry.base, 'base.jpg'), userId);
+    try {
+      const url = await uploadToCloudinary(entry.file, userId);
+      urls.push(url);
+      if (entry.shapes && entry.shapes.length) {
+        let baseUrl = entry.base;
+        if (!/^https?:/i.test(baseUrl || '')) {
+          baseUrl = await uploadToCloudinary(dataURLtoFile(entry.base, 'base.jpg'), userId);
+        }
+        annotations[url] = { base: baseUrl, shapes: entry.shapes };
       }
-      annotations[url] = { base: baseUrl, shapes: entry.shapes };
+    } catch (err) {
+      console.error('[SAVE] Falló la subida de una captura:', err);
+      failed++;
     }
   }
-  return { urls, annotations };
+  return { urls, annotations, failed };
 }
 
 // ==================== EDITOR DE DIBUJO (tipo Paint) ====================
@@ -1483,22 +1514,18 @@ form.addEventListener('submit', async (e) => {
 
     if (pendingFilesPre.length > 0 || pendingFilesPost.length > 0) {
       saveBtn.textContent = 'Subiendo imagenes...';
-      try {
-        const [preRes, postRes] = await Promise.all([
-          uploadPendingEntries(pendingFilesPre, currentUser.uid),
-          uploadPendingEntries(pendingFilesPost, currentUser.uid),
-        ]);
-        console.log('[SAVE] Cloudinary URLs pre:', preRes.urls);
-        console.log('[SAVE] Cloudinary URLs post:', postRes.urls);
-        trade.screenshotsPre = [...existingScreensPre, ...preRes.urls];
-        trade.screenshotsPost = [...existingScreensPost, ...postRes.urls];
-        trade.annotations = { ...trade.annotations, ...preRes.annotations, ...postRes.annotations };
-      } catch (uploadErr) {
-        console.error('[SAVE] Upload failed:', uploadErr);
-        alert('Error subiendo imagenes: ' + uploadErr.message);
-        saveBtn.disabled = false;
-        saveBtn.textContent = 'Guardar';
-        return;
+      const [preRes, postRes] = await Promise.all([
+        uploadPendingEntries(pendingFilesPre, currentUser.uid),
+        uploadPendingEntries(pendingFilesPost, currentUser.uid),
+      ]);
+      console.log('[SAVE] Cloudinary URLs pre:', preRes.urls);
+      console.log('[SAVE] Cloudinary URLs post:', postRes.urls);
+      trade.screenshotsPre = [...existingScreensPre, ...preRes.urls];
+      trade.screenshotsPost = [...existingScreensPost, ...postRes.urls];
+      trade.annotations = { ...trade.annotations, ...preRes.annotations, ...postRes.annotations };
+      const totalFailed = preRes.failed + postRes.failed;
+      if (totalFailed > 0) {
+        alert(`No se pudieron subir ${totalFailed} captura(s). Se guarda la operación con el resto; puedes volver a añadirlas editando la operación.`);
       }
     }
 
